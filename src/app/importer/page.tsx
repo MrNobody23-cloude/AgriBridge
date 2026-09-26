@@ -22,7 +22,11 @@ export default function ImporterDashboard() {
 
   // Compliance check
   const [complianceCountry, setComplianceCountry] = useState('UK');
-  const [batchCodeForCompliance, setBatchCodeForCompliance] = useState('AGR-2026-UK-284701');
+  // Empty, not a pre-filled sample code. This defaulted to
+  // 'AGR-2026-UK-284701', so pressing "Run Import Screening" without
+  // choosing anything screened that batch — or silently failed against a
+  // batch that does not exist, depending on what was seeded.
+  const [batchCodeForCompliance, setBatchCodeForCompliance] = useState('');
   const [complianceResult, setComplianceResult] = useState<any>(null);
   const [checkingCompliance, setCheckingCompliance] = useState(false);
 
@@ -41,16 +45,32 @@ export default function ImporterDashboard() {
 
   useEffect(() => { fetchShipments(); }, []);
 
+  // The shipment an operator actually clicked is the one they mean to screen,
+  // so that is what the batch field follows. Previously the field kept
+  // whatever it was last typed with, and defaulted to a hardcoded code.
+  useEffect(() => {
+    if (selectedShipment?.batch?.batchCode) {
+      setBatchCodeForCompliance(selectedShipment.batch.batchCode);
+      setComplianceCountry(selectedShipment.destinationCountry || 'UK');
+    }
+  }, [selectedShipment]);
+
   const handleCheckCompliance = async () => {
+    // Screening runs against one batch. With none chosen, there is nothing to
+    // screen, and posting a blank code returned a result for an arbitrary
+    // batch rather than an error.
+    if (!batchCodeForCompliance.trim()) return;
     setCheckingCompliance(true);
+    setComplianceResult(null);
     try {
       const res = await fetch('/api/compliance/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country: complianceCountry, batchId: batchCodeForCompliance }),
+        body: JSON.stringify({ country: complianceCountry, batchId: batchCodeForCompliance.trim() }),
       });
       const json = await res.json();
       if (json.success) setComplianceResult(json.data);
+      else setComplianceResult(null);
     } catch (e) {
       console.error('Compliance check failed:', e);
     } finally {
@@ -127,12 +147,19 @@ export default function ImporterDashboard() {
             <div>
               <label className="text-[10px] font-bold text-gray-500 uppercase">Batch Code</label>
               <input type="text" value={batchCodeForCompliance} onChange={(e) => setBatchCodeForCompliance(e.target.value)}
+                placeholder="Select a shipment above, or type a batch code"
                 className="w-full text-xs p-2.5 bg-[#FAFAF7] border border-gray-200 rounded-xl mt-1 font-mono" />
             </div>
-            <button onClick={handleCheckCompliance} disabled={checkingCompliance}
-              className="w-full py-2.5 bg-[#16a34a] text-white text-xs font-bold rounded-xl hover:bg-green-700">
+            <button onClick={handleCheckCompliance}
+              disabled={checkingCompliance || !batchCodeForCompliance.trim()}
+              className="w-full py-2.5 bg-[#16a34a] text-white text-xs font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
               {checkingCompliance ? 'Running RAG Check...' : '⚖️ Run Import Screening'}
             </button>
+            {!batchCodeForCompliance.trim() && (
+              <p className="text-[11px] text-gray-400">
+                No batch selected. Open a shipment above to fill this in.
+              </p>
+            )}
           </div>
           {complianceResult && (
             <div className="space-y-2 pt-2">

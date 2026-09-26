@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import TrustScoreGauge from '@/components/TrustScoreGauge';
+import RecentBatchCodes from '@/components/RecentBatchCodes';
 
 interface Batch {
   id: string;
@@ -161,11 +162,32 @@ export default function RetailerDashboard() {
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl">⭐</div>
         </div>
+        {/* "XGBoost ML Active / Spoilage AI / Real-time Shelf Life" was
+            printed unconditionally. Nothing polls the model: spoilage is
+            computed on request via /api/ml/spoilage, and a 200 there means
+            the service answered, not that a prediction is current. The tile
+            now reports the last prediction actually made, if any. */}
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">XGBoost ML Active</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">Spoilage AI</p>
-            <span className="text-[11px] font-semibold text-purple-600 block mt-1">Real-time Shelf Life</span>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Shelf-Life Prediction</p>
+            {spoilageResult ? (
+              <>
+                <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  {spoilageResult.remainingShelfLifeDays ?? spoilageResult.remainingDays ?? '—'}
+                  <span className="text-sm font-bold text-gray-400 ml-1">days</span>
+                </p>
+                <span className="text-[11px] font-semibold text-purple-600 block mt-1">
+                  From the last scan
+                </span>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-extrabold text-gray-400 mt-1">Not run</p>
+                <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+                  Scan a batch to predict shelf life
+                </span>
+              </>
+            )}
           </div>
           <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl">🦠</div>
         </div>
@@ -191,15 +213,13 @@ export default function RetailerDashboard() {
                 {scanLoading ? '...' : 'Scan'}
               </button>
             </div>
-            {/* Quick demo scans */}
-            <div className="flex flex-wrap gap-1.5">
-              {['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503'].map(code => (
-                <button key={code} onClick={() => { setScanCode(code); handleScanVerify(code); }}
-                  className="text-[10px] font-mono font-bold text-gray-500 hover:text-[#16a34a] bg-gray-100 px-2 py-1 rounded-lg">
-                  {code.slice(-6)}
-                </button>
-              ))}
-            </div>
+            {/* Unlabelled demo scans, truncated to their last six digits so
+                they were the least identifiable strings on the page. Only
+                codes that resolve in the ledger are offered now. */}
+            <RecentBatchCodes
+              codes={['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503']}
+              onPick={(code) => { setScanCode(code); handleScanVerify(code); }}
+            />
             {scanError && <p className="text-xs font-semibold text-red-600">⚠️ {scanError}</p>}
           </div>
 

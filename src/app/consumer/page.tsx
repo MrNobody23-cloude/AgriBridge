@@ -3,10 +3,15 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import TrustScoreGauge from '@/components/TrustScoreGauge';
+import RecentBatchCodes from '@/components/RecentBatchCodes';
 import Link from 'next/link';
 
 export default function ConsumerPage() {
-  const [searchCode, setSearchCode] = useState('AGR-2026-UK-284701');
+  // Empty by default. This was pre-filled with 'AGR-2026-UK-284701' and the
+  // chat silently fell back to the same code whenever the field was cleared,
+  // so a consumer who typed nothing still got an answer about a specific
+  // batch — one they never chose, and one that may not exist.
+  const [searchCode, setSearchCode] = useState('');
   const [batchData, setBatchData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -46,6 +51,16 @@ export default function ConsumerPage() {
     const q = queryText || userQuery;
     if (!q) return;
 
+    // The assistant answers about one batch, so there must be one. It used
+    // to substitute a hardcoded code when the field was empty, which meant
+    // the "verified" answer on screen was about a batch the consumer never
+    // looked up.
+    const batchCode = searchCode.trim();
+    if (!batchCode) {
+      setError('Enter a batch ID above before asking a question — the assistant answers about a specific batch.');
+      return;
+    }
+
     const newMsgs = [...chatMessages, { sender: 'user' as const, text: q }];
     setChatMessages(newMsgs);
     setUserQuery('');
@@ -55,10 +70,7 @@ export default function ConsumerPage() {
       const res = await fetch('/api/consumer/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: searchCode || 'AGR-2026-UK-284701',
-          query: q,
-        }),
+        body: JSON.stringify({ batchId: batchCode, query: q }),
       });
 
       const json = await res.json();
@@ -101,20 +113,18 @@ export default function ConsumerPage() {
             </button>
           </div>
 
-          <div className="flex justify-center gap-2 pt-2">
-            {['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503'].map((demoCode) => (
-              <button
-                key={demoCode}
-                onClick={() => {
-                  setSearchCode(demoCode);
-                  handleVerify(demoCode);
-                }}
-                className="text-[11px] font-mono font-bold text-gray-500 hover:text-[#16a34a] bg-gray-100 px-2.5 py-1 rounded-lg"
-              >
-                {demoCode}
-              </button>
-            ))}
-          </div>
+          {/* Unlabelled sample codes. A visitor could not tell these from a
+              list of real batches, so an empty ledger still looked populated
+              — the "no results" state was the one thing a verifier most needs
+              to trust. They are now called what they are, and each one is
+              only offered if it actually exists in the ledger. */}
+          <RecentBatchCodes
+            codes={['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503']}
+            onPick={(code) => {
+              setSearchCode(code);
+              handleVerify(code);
+            }}
+          />
         </div>
       </div>
 
@@ -134,9 +144,40 @@ export default function ConsumerPage() {
             </div>
 
             <div>
-              <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-green-100 text-[#16a34a]">
-                ✓ POLYGON BLOCKCHAIN VERIFIED
-              </span>
+              {/* This badge read "✓ POLYGON BLOCKCHAIN VERIFIED" for every
+                  batch the API returned, including those whose chain status
+                  is NOT_CONFIGURED, UNREACHABLE or NOT_FOUND. The API already
+                  returns `chainVerification`; the badge now reports it, and
+                  a chain that could not be checked is not shown as verified. */}
+              {(() => {
+                const chain = batchData.chainVerification;
+                const verified = chain?.status === 'VERIFIED';
+                const tampered = chain?.status === 'TAMPERED';
+                const styles = tampered
+                  ? 'bg-red-100 text-red-700'
+                  : verified
+                    ? 'bg-green-100 text-[#16a34a]'
+                    : 'bg-amber-100 text-amber-800';
+                const label = tampered
+                  ? '⚠ ON-CHAIN RECORD MISMATCH'
+                  : verified
+                    ? '✓ POLYGON BLOCKCHAIN VERIFIED'
+                    : `CHAIN ${String(chain?.status || 'UNVERIFIED').replace(/_/g, ' ')}`;
+                return (
+                  <>
+                    <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${styles}`}>
+                      {label}
+                    </span>
+                    {!verified && !tampered && (
+                      <p className="text-[10px] text-gray-400 mt-1.5">
+                        {chain?.reason
+                          ? chain.reason
+                          : 'The chain status could not be established, so no verification is claimed.'}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
               <h3 className="text-lg font-bold text-[#1a1a1a] mt-2">{batchData.batch.product?.name}</h3>
               <p className="text-xs text-gray-500 font-mono">Batch Code: {batchData.batch.batchCode}</p>
             </div>
@@ -164,12 +205,18 @@ export default function ConsumerPage() {
                   <span>🤖</span> Consumer Trust AI Assistant
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Grounded in verified blockchain audit records for {batchData.batch.batchCode}.
+                  {/* Claimed the answers were "grounded in verified
+                      blockchain audit records" for every batch, including one
+                      whose chain status is NOT_CONFIGURED or UNREACHABLE. */}
+                  Answers are drawn from the ledger record for {batchData.batch.batchCode}
+                  {batchData.chainVerification?.status === 'VERIFIED'
+                    ? ', which is anchored on-chain.'
+                    : '.'}
                 </p>
               </div>
-              <span className="text-xs font-bold text-[#16a34a] bg-green-50 px-2.5 py-1 rounded-full">
-                Online
-              </span>
+              {/* "Online" was printed unconditionally. Nothing here probes the
+                  Python service; whether the assistant can answer is only known
+                  once a question has been sent. */}
             </div>
 
             {/* Chat Box */}

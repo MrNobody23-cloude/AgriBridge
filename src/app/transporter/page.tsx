@@ -24,12 +24,17 @@ interface ColdChainStats {
 }
 
 export default function TransporterDashboard() {
-  const [batchId, setBatchId] = useState('AGR-2026-UK-284701');
+  // Empty by default. Both batch fields were pre-filled with
+  // 'AGR-2026-UK-284701', so on load this page immediately fetched and
+  // displayed the cold-chain history of one specific batch that the operator
+  // had not chosen — readings, averages and breach rates for someone else's
+  // consignment.
+  const [batchId, setBatchId] = useState('');
   const [history, setHistory] = useState<TempLog[]>([]);
   const [stats, setStats] = useState<ColdChainStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [simLoading, setSimLoading] = useState(false);
-  const [simBatchId, setSimBatchId] = useState('AGR-2026-UK-284701');
+  const [simBatchId, setSimBatchId] = useState('');
   const [simSensorId, setSimSensorId] = useState('IOT-REEFER-001');
   const [simHours, setSimHours] = useState('24');
   const [simMsg, setSimMsg] = useState('');
@@ -69,6 +74,10 @@ export default function TransporterDashboard() {
 
   const handleSimulate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!simBatchId.trim()) {
+      setSimMsg('Enter a batch code before running the simulator.');
+      return;
+    }
     setSimLoading(true);
     setSimMsg('');
     try {
@@ -76,9 +85,12 @@ export default function TransporterDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId: simBatchId,
+          batchId: simBatchId.trim(),
           sensorId: simSensorId,
-          hours: parseInt(simHours) || 24,
+          // The route destructures `hoursOfData`. This sent `hours`, which
+          // the route never reads, so the duration field was ignored and
+          // every simulation silently ran for the 24-hour default.
+          hoursOfData: parseInt(simHours) || 24,
         }),
       });
       const json = await res.json();
@@ -97,13 +109,20 @@ export default function TransporterDashboard() {
 
   const handlePostReading = async (e: React.FormEvent) => {
     e.preventDefault();
+    // A reading has to belong to a batch. With the lookup field now empty by
+    // default, this would otherwise post an unattributed reading.
+    if (!batchId.trim()) {
+      setSimMsg('Load a batch code above before posting a reading.');
+      return;
+    }
     setPostingReading(true);
+    setSimMsg('');
     try {
       const res = await fetch('/api/iot/readings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId,
+          batchId: batchId.trim(),
           sensorId: simSensorId,
           temperature: parseFloat(manualTemp),
           humidity: parseFloat(manualHumidity),

@@ -9,7 +9,10 @@ export default function ExporterDashboard() {
 
   // Modal / Action states
   const [destinationCountry, setDestinationCountry] = useState('UK');
-  const [batchId, setBatchId] = useState('AG-2847');
+  // Empty, not 'AG-2847'. The field was pre-filled with a code the exporter
+  // never chose, so submitting the form created a shipment against whatever
+  // batch happened to match — or against nothing.
+  const [batchId, setBatchId] = useState('');
   const [quantity, setQuantity] = useState('2400');
   const [creatingShipment, setCreatingShipment] = useState(false);
 
