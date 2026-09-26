@@ -55,7 +55,19 @@ export default function PublicVerifyPage() {
     }
 
     const { batch, blockchainVerification, trustDetails } = data;
-    const isVerified = blockchainVerification?.verified;
+    // Three states, not two. A chain that is unconfigured or unreachable has not
+    // verified anything — it has also produced no evidence of tampering. Showing
+    // "TAMPER WARNING" to a consumer scanning a QR code because nobody set a
+    // contract address would accuse an honest farmer of counterfeiting.
+    const chainStatus = blockchainVerification?.status as string | undefined;
+    const isVerified = chainStatus === 'VERIFIED';
+    const isTampered = chainStatus === 'TAMPERED';
+    const isChainBlind = !isVerified && !isTampered;
+    const badge = isVerified
+        ? { bg: 'bg-green-100', fg: 'text-[#16a34a]', glyph: '✓', label: 'POLYGON VERIFIED' }
+        : isTampered
+          ? { bg: 'bg-red-100', fg: 'text-red-600', glyph: '✗', label: 'TAMPER WARNING' }
+          : { bg: 'bg-amber-100', fg: 'text-amber-700', glyph: '?', label: 'NOT CHAIN-VERIFIED' };
 
     return (
         <div className="min-h-screen bg-[#FAFAF7] py-10 px-4 sm:px-6 lg:px-8">
@@ -63,14 +75,14 @@ export default function PublicVerifyPage() {
                 {/* Header Badge */}
                 <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl font-extrabold ${isVerified ? 'bg-green-100 text-[#16a34a]' : 'bg-red-100 text-red-600'}`}>
-                            {isVerified ? '✓' : '✗'}
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl font-extrabold ${badge.bg} ${badge.fg}`}>
+                            {badge.glyph}
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-mono font-bold text-gray-400">BATCH {batch.batchCode}</span>
-                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${isVerified ? 'bg-green-100 text-[#16a34a]' : 'bg-red-100 text-red-600'}`}>
-                                    {isVerified ? 'POLYGON VERIFIED' : 'TAMPER WARNING'}
+                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${badge.bg} ${badge.fg}`}>
+                                    {badge.label}
                                 </span>
                             </div>
                             <h1 className="text-2xl font-bold text-[#1a1a1a] mt-0.5">{batch.product?.name}</h1>
@@ -88,7 +100,7 @@ export default function PublicVerifyPage() {
                     </h2>
                     <div className="p-4 bg-[#FAFAF7] rounded-xl border border-gray-200">
                         <p className="text-xs text-gray-700 leading-relaxed font-medium">
-                            {trustDetails?.plainAi || 'This crop batch has passed all blockchain authenticity checks.'}
+                            {trustDetails?.plainAi || 'No trust assessment has been computed for this batch yet. Nothing below has been verified.'}
                         </p>
                     </div>
 
@@ -103,21 +115,41 @@ export default function PublicVerifyPage() {
                         </div>
                         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                             <span className="text-[11px] text-gray-400 font-medium block">Certificates</span>
-                            <span className="text-sm font-bold text-[#16a34a]">{batch.certificates?.length || 1} Verified</span>
+                            <span className="text-sm font-bold text-[#16a34a]">
+                                {batch.certificates?.length || 0} Verified
+                            </span>
                         </div>
                         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                             <span className="text-[11px] text-gray-400 font-medium block">Blockchain</span>
-                            <span className="text-sm font-bold text-purple-600">Polygon Amoy</span>
+                            <span className="text-sm font-bold text-purple-600">
+                                {isVerified || isTampered ? 'Polygon Amoy' : 'Not configured'}
+                            </span>
                         </div>
                     </div>
+
+                    {/* A consumer deserves to know when a check could not run, as
+                        much as when one failed. */}
+                    {isChainBlind && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                            <p className="text-[11px] text-amber-800 leading-relaxed">
+                                {chainStatus === 'NOT_CONFIGURED'
+                                    ? 'No blockchain contract is configured on this deployment, so no on-chain check was performed. The details below come from this system\'s own database and have not been independently verified.'
+                                    : 'The configured blockchain could not be reached, so no on-chain check was performed. The details below come from this system\'s own database and have not been independently verified.'}
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Cryptographic Proof */}
                 <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm space-y-3">
-                    <h2 className="text-base font-bold text-[#1a1a1a]">🔐 Immutable Cryptographic Proof</h2>
+                    <h2 className="text-base font-bold text-[#1a1a1a]">
+                        {isVerified || isTampered ? '🔐 Immutable Cryptographic Proof' : '🔐 Batch Fingerprint (not on-chain)'}
+                    </h2>
                     <div className="space-y-2 text-xs font-mono">
                         <div>
-                            <span className="text-gray-400 block text-[10px]">SHA-256 BATCH CRYPTOGRAPHIC HASH:</span>
+                            <span className="text-gray-400 block text-[10px]">
+                                SHA-256 BATCH FINGERPRINT{isVerified || isTampered ? ' (MATCHES ON-CHAIN RECORD)' : ' (COMPUTED LOCALLY — NOT ON A CHAIN)'}:
+                            </span>
                             <div className="p-2.5 bg-gray-900 text-green-400 rounded-lg overflow-x-auto text-[11px] break-all">
                                 {batch.blockchainHash}
                             </div>

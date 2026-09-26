@@ -81,7 +81,7 @@ model Batch {
   status                    String   @default("Registered")
   blockchainHash            String
   blockchainTransactionHash String?
-  blockchainMode            String   @default("mock")
+  blockchainMode            String   @default("not_configured")
   trustScore                Int      @default(0)
   // ML predictions cached
   spoilageProbability       Float?

@@ -126,7 +126,11 @@ export async function POST(req: NextRequest) {
             location: validated.location,
         });
 
-        // Register on Polygon blockchain (real or mock)
+        // Register on Polygon blockchain. When no contract is configured this
+        // returns success: false with mode 'not_configured' and a null
+        // transaction hash; the batch is still created, because refusing to
+        // record a harvest because the chain is off would be worse. The record
+        // simply says, honestly, that it was never anchored.
         const chainRes = await registerBatchOnChain(batchCode, cryptographicHash);
 
         // Save batch to database
@@ -160,6 +164,8 @@ export async function POST(req: NextRequest) {
                 metadata: JSON.stringify({
                     blockchainHash: cryptographicHash,
                     blockchainMode: chainRes.mode,
+                    chainAnchored: chainRes.success,
+                    chainReason: chainRes.reason ?? null,
                     quantity: validated.quantity,
                     unit: validated.unit || 'kg',
                 }),
@@ -174,7 +180,17 @@ export async function POST(req: NextRequest) {
                     batchId: newBatch.id,
                     certificateType: validated.certificateType || 'Phytosanitary Certificate',
                     fileUrl: validated.certificateUrl,
-                    fileHash: cryptographicHash,
+                    // The certificate document itself was never downloaded or
+                    // hashed here, so its content hash is unknown. The previous
+                    // code stored the *batch's* hash in this field, which is an
+                    // indexed column the fraud scanner uses to detect a
+                    // certificate reused across batches — copying the batch hash
+                    // made that check meaningless, and it would have collided
+                    // with the real batch-hash check. An empty string is honest
+                    // and simply never matches; the proper path is
+                    // POST /api/certificates/upload, which hashes the real file
+                    // and can verify it against IPFS.
+                    fileHash: '',
                     issuer: validated.certIssuer || 'APEDA / FSSAI Authority',
                     issueDate: new Date(),
                     expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),

@@ -1,13 +1,15 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/auth';
+import { requirePermission } from '@/lib/auth';
 import { spoilagePredictionSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
-    const authResult = await requireAuth(req);
+    // `ml:predict` excludes CONSUMER. This route writes spoilageProbability,
+    // spoilageRisk and remainingShelfLifeDays onto the batch.
+    const authResult = await requirePermission(req, 'ml:predict');
     if (authResult instanceof Response) return authResult;
 
     try {

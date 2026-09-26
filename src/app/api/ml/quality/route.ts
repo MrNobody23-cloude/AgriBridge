@@ -1,13 +1,16 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAuth } from '@/lib/auth';
+import { requirePermission } from '@/lib/auth';
 import { qualityPredictionSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
-    const authResult = await requireAuth(req);
+    // `ml:predict` excludes CONSUMER. This route writes qualityScore and
+    // qualityGrade onto the batch, so a bare requireAuth let any signed-in
+    // account overwrite a quality assessment it has no standing to make.
+    const authResult = await requirePermission(req, 'ml:predict');
     if (authResult instanceof Response) return authResult;
 
     try {

@@ -124,7 +124,7 @@ export async function answerConsumerQuery(
         farmerName: batch.farmer.name,
         farmName: batch.farmer.farmerProfile?.farmName,
         farmLocation: batch.farmer.farmerProfile?.location,
-        blockchainVerified: chainV.verified,
+        blockchainVerified: chainV.status === 'VERIFIED',
         blockchainStatus: chainV.status,
         certificatesCount: batch.certificates.length,
         certificatesVerified: batch.certificates.filter(c => c.verificationStatus === 'VERIFIED').length,
@@ -174,7 +174,7 @@ export async function answerConsumerQuery(
         answer,
         checkpoints: batch.events.length,
         trustScore: batch.trustScore,
-        verifiedOnChain: chainV.verified,
+        verifiedOnChain: chainV.status === 'VERIFIED',
         sources,
         confidence,
     };
@@ -244,13 +244,20 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
         // Fallback: run TypeScript-side agents
 
         // 1. Traceability
+        // `verified` is false for a chain that was never configured and for one
+        // that is unreachable, neither of which is evidence of tampering. Only
+        // an actual VERIFIED or TAMPERED reading may move this agent to
+        // PASSED/FLAGGED; anything else reports the gap without accusing anyone.
+        const chainDecisive = chainV.status === 'VERIFIED' || chainV.status === 'TAMPERED';
         responses.push({
             agentName: '🔍 Traceability Agent',
             agentType: 'traceability',
-            status: chainV.verified ? 'PASSED' : 'FLAGGED',
-            title: `${batch.events.length} supply chain events recorded`,
+            status: chainDecisive ? (chainV.verified ? 'PASSED' : 'FLAGGED') : 'ANSWERED',
+            title: chainDecisive && !chainV.verified
+                ? `On-chain hash does not match the database record`
+                : `${batch.events.length} supply chain events recorded`,
             details: `Blockchain: ${chainV.status} | ${batch.events.length} events | Hash: ${batch.blockchainHash.slice(0, 16)}...`,
-            confidence: chainV.verified ? 0.99 : 0.70,
+            confidence: chainV.status === 'VERIFIED' ? 0.99 : chainDecisive ? 0.70 : 0.30,
             toolsUsed: ['verify_blockchain', 'get_supply_chain_events'],
         });
 
@@ -319,7 +326,7 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
             agentType: 'consumer',
             status: 'ANSWERED',
             title: `QR verification ready — Trust Score ${batch.trustScore}/100`,
-            details: `Consumer can verify this batch at /verify/${batch.batchCode}. ${chainV.verified ? 'Blockchain verified.' : 'Blockchain pending.'}`,
+            details: `Consumer can verify this batch at /verify/${batch.batchCode}. ${chainV.status === 'VERIFIED' ? 'Blockchain verified.' : chainV.status === 'TAMPERED' ? 'Blockchain hash mismatch — do not trust this batch.' : `Blockchain ${String(chainV.status).toLowerCase().replace(/_/g, ' ')}.`}`,
             confidence: 0.96,
             toolsUsed: ['get_batch', 'verify_blockchain'],
         });
