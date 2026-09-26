@@ -56,7 +56,13 @@ export async function checkComplianceRAG(
                 source: (sources[0] as any)?.source || 'AgriBridge RAG Knowledge Base',
                 evidence: data.evidence,
             }];
-            const summary = `RAG Compliance Agent retrieved regulatory evidence for export to ${country}. Confidence: ${Math.round(Number(data.confidence || 0) * 100)}%.`;
+            // A run that came back confident with no evidence to back it is
+            // worse than one that reports having none, so the confidence
+            // figure is only quoted when the service actually supplied one.
+            const reportedConfidence = Number(data.confidence || 0);
+            const summary = reportedConfidence > 0
+                ? `RAG Compliance Agent retrieved regulatory evidence for export to ${country}. Confidence: ${Math.round(reportedConfidence * 100)}%.`
+                : `RAG Compliance Agent returned an answer for export to ${country} without reporting a confidence value. Verify the cited source before relying on it.`;
 
             await prisma.aiAgentLog.create({
                 data: {
@@ -65,7 +71,11 @@ export async function checkComplianceRAG(
                     task: `Regulatory Screening for Export to ${country}`,
                     input: `Country: ${country}, Batch: ${batchId || 'N/A'}`,
                     output: summary,
-                    confidence: Number(data.confidence || 0.85),
+                    // 0 rather than the previous 0.85 default: `res.ok` only
+                    // means an HTTP 200, not that the RAG service had evidence.
+                    // A compliant answer with no confidence behind it is not a
+                    // finding, which is why `summary` above says so too.
+                    confidence: Number(data.confidence || 0),
                     status: passed ? 'PASSED' : 'PENDING',
                     sources: JSON.stringify(sources),
                 },
@@ -134,7 +144,10 @@ export async function answerConsumerQuery(
 
     let answer = '';
     let sources: unknown[] = [];
-    let confidence = 0.75;
+    // Zero until the service supplies its own. This was 0.75, so a run where
+    // the Python service never responded was logged and returned as a
+    // three-quarter-confident answer built from a database lookup.
+    let confidence = 0;
 
     try {
         const res = await fetch(`${AI_SERVICE_URL}/api/agents/consumer/answer`, {
@@ -147,7 +160,7 @@ export async function answerConsumerQuery(
             const data = await res.json() as Record<string, unknown>;
             answer = String(data.answer || '');
             sources = (data.sources as unknown[]) || [];
-            confidence = Number(data.confidence || 0.75);
+            confidence = Number(data.confidence || 0);
         }
     } catch (err: any) {
         console.warn(`[ConsumerAgent] AI service unavailable: ${err.message}`);
@@ -277,23 +290,46 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
         });
 
         // 3. Spoilage (heuristic fallback when Python unavailable)
-        const spoilageResult = await heuristicSpoilage(
-            batch.product.name,
-            batch.temperatureLogs.length > 0
-                ? batch.temperatureLogs.reduce((s, t) => s + t.temperature, 0) / batch.temperatureLogs.length
-                : 12.5,
-            Math.floor((Date.now() - new Date(batch.harvestDate).getTime()) / (1000 * 60 * 60 * 24)),
-            batch.harvestDate
-        );
-        responses.push({
-            agentName: '🦠 Spoilage Prediction Agent',
-            agentType: 'spoilage',
-            status: spoilageResult.spoilageRisk === 'HIGH' || spoilageResult.spoilageRisk === 'CRITICAL' ? 'HIGH_RISK' : 'COMPLETED',
-            title: `Spoilage risk: ${spoilageResult.spoilageRisk} — ${spoilageResult.remainingDays} days remaining`,
-            details: `${spoilageResult.explanation} ${spoilageResult.recommendation.slice(0, 80)}`,
-            confidence: 0.85,
-            toolsUsed: ['heuristic_spoilage_model', 'sensor_data'],
-        });
+        // A batch with no temperature readings used to be scored as though it
+        // had sat at exactly 12.5 °C — a plausible-looking cold-chain figure
+        // invented to fill a missing input, which then flowed into the live
+        // Agent Activity feed as a real assessment. With no readings there is
+        // nothing to assess, so the agent reports ANSWERED (it ran, and the
+        // answer is that the evidence is missing) and emits no risk figure.
+        const hasSensorData = batch.temperatureLogs.length > 0;
+        const meanTemp = hasSensorData
+            ? batch.temperatureLogs.reduce((s, t) => s + t.temperature, 0) / batch.temperatureLogs.length
+            : null;
+
+        if (!hasSensorData || meanTemp === null) {
+            responses.push({
+                agentName: '🦠 Spoilage Prediction Agent',
+                agentType: 'spoilage',
+                status: 'ANSWERED',
+                title: 'Cannot assess spoilage — no cold-chain readings',
+                details:
+                    'This batch has no temperature readings recorded, so there is no evidence to assess. ' +
+                    'Attach a sensor or enter readings manually rather than assuming a temperature.',
+                confidence: 0,
+                toolsUsed: [],
+            });
+        } else {
+            const spoilageResult = await heuristicSpoilage(
+                batch.product.name,
+                meanTemp,
+                Math.floor((Date.now() - new Date(batch.harvestDate).getTime()) / (1000 * 60 * 60 * 24)),
+                batch.harvestDate
+            );
+            responses.push({
+                agentName: '🦠 Spoilage Prediction Agent',
+                agentType: 'spoilage',
+                status: spoilageResult.spoilageRisk === 'HIGH' || spoilageResult.spoilageRisk === 'CRITICAL' ? 'HIGH_RISK' : 'COMPLETED',
+                title: `Spoilage risk: ${spoilageResult.spoilageRisk} — ${spoilageResult.remainingDays} days remaining`,
+                details: `${spoilageResult.explanation} ${spoilageResult.recommendation.slice(0, 80)}`,
+                confidence: 0.85,
+                toolsUsed: ['heuristic_spoilage_model', 'sensor_data'],
+            });
+        }
 
         // 4. Compliance
         const destination = batch.destinationCountry || batch.shipments[0]?.destinationCountry || 'UK';

@@ -131,12 +131,20 @@ export default function ExporterDashboard() {
     <DashboardLayout title="Exporter Dashboard">
       {/* Top Banner Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Banner stats
+            These four tiles read `shipments.length || 6`, a fixed "98.4% RAG
+            Compliance Pass" against a "UK, UAE, USA, Japan" caption, a fixed
+            "14 Verified" certificate count, and a fixed "1 Flagged / MRL
+            Limit Warning". None was measured: no pass rate is computed
+            anywhere, no MRL limit is ever tested, and the two counts were
+            constants that rendered even when the shipment list was empty.
+            The tiles now count what was fetched. */}
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Export Shipments</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{shipments.length || 6}</p>
-            <span className="text-[11px] font-semibold text-[#16a34a] inline-flex items-center gap-1 mt-1">
-              <span>↑</span> 100% RAG Screened
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{shipments.length}</p>
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              {shipments.length === 0 ? 'None recorded' : 'In this account'}
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl font-bold">
@@ -146,10 +154,12 @@ export default function ExporterDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">RAG Compliance Pass</p>
-            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">98.4%</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Compliance Checks Run</p>
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+              {shipments.filter((s) => s.complianceStatus && s.complianceStatus !== 'PENDING').length}
+            </p>
             <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
-              UK, UAE, USA, Japan
+              RAG runs per shipment, not a pass rate
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl font-bold">
@@ -159,10 +169,12 @@ export default function ExporterDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Certificate Hashes</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">14 Verified</p>
-            <span className="text-[11px] font-semibold text-purple-600 block mt-1">
-              SHA-256 Anti-Fraud
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Screened Shipments</p>
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+              {shipments.filter((s) => s.screenedAt || s.complianceStatus).length} / {shipments.length}
+            </p>
+            <span className="text-[11px] font-semibold text-gray-500 block">
+              With a recorded compliance result
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl font-bold">
@@ -173,9 +185,11 @@ export default function ExporterDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">High Risk Shipments</p>
-            <p className="text-2xl font-extrabold text-amber-600 mt-1">1 Flagged</p>
-            <span className="text-[11px] font-semibold text-red-600 block mt-1">
-              MRL Limit Warning
+            <p className="text-2xl font-extrabold text-amber-600 mt-1">
+              {shipments.filter((s) => Number(s.riskScore) >= 60).length} Flagged
+            </p>
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              Risk score 60 or above
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl font-bold">
@@ -365,8 +379,18 @@ export default function ExporterDashboard() {
               {shipments.map((ship, idx) => (
                 <tr key={ship.id || idx} className="hover:bg-gray-50">
                   <td className="py-3 px-4 font-mono font-bold text-blue-600">{ship.shipmentCode}</td>
-                  <td className="py-3 px-4 font-mono font-bold text-[#16a34a]">{ship.batch?.batchCode || 'AG-2847'}</td>
-                  <td className="py-3 px-4 font-semibold text-[#1a1a1a]">{ship.batch?.product?.name || 'Alphonso Mango'}</td>
+                  {/* A shipment whose batch relation is missing previously
+                      rendered "AG-2847 / Alphonso Mango", so a row with no
+                      provenance behind it still looked like a traced export.
+                      The code was invented precisely to be looked up later, and
+                      a lookup of a fabricated code cannot succeed. Say the
+                      link is missing instead. */}
+                  <td className="py-3 px-4 font-mono font-bold text-[#16a34a]">
+                    {ship.batch?.batchCode ?? <span className="text-gray-400 font-medium">No batch linked</span>}
+                  </td>
+                  <td className="py-3 px-4 font-semibold text-[#1a1a1a]">
+                    {ship.batch?.product?.name ?? <span className="text-gray-400 font-medium">Unknown product</span>}
+                  </td>
                   <td className="py-3 px-4 font-bold text-gray-700">{ship.destinationCountry}</td>
                   <td className="py-3 px-4 text-gray-600">{ship.quantity} kg</td>
                   <td className="py-3 px-4 font-extrabold text-[#16a34a]">{ship.riskScore} / 100</td>

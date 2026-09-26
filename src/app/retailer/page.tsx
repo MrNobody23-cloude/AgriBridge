@@ -110,18 +110,54 @@ export default function RetailerDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">QR Scan Ready</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">100%</p>
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">Consumer Accessible</span>
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+              {batches.length
+                ? `${batches.filter((b) => b.id).length} / ${batches.length}`
+                : '–'}
+            </p>
+            {/* These two tiles previously read "100% / Consumer Accessible" and
+                "Blockchain Backed". Neither is a measurement: every batch
+                renders a QR, and no chain call happens on this page at all, so
+                claiming blockchain backing was an assertion this screen could
+                not have known to be true. */}
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              Batches with a batch code
+            </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">📱</div>
         </div>
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Trust Score</p>
-            <p className={`text-2xl font-extrabold mt-1 ${trustColor(batches.length ? batches.reduce((s, b) => s + b.trustScore, 0) / batches.length : 85)}`}>
-              {batches.length ? Math.round(batches.reduce((s, b) => s + b.trustScore, 0) / batches.length) : 85} / 100
-            </p>
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">Blockchain Backed</span>
+            {/* Averaged over batches that actually carry a score. A batch with
+                trustScore 0 has not been assessed, and averaging those in as
+                zeroes would understate the ones that have — so they are
+                excluded, and when nothing is scored the tile says so instead of
+                falling back to a hardcoded 85. */}
+            {(() => {
+              const scored = batches.filter((b) => Number(b.trustScore) > 0);
+              if (scored.length === 0) {
+                return (
+                  <>
+                    <p className="text-2xl font-extrabold text-gray-400 mt-1">Not computed</p>
+                    <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+                      No batch has been scored
+                    </span>
+                  </>
+                );
+              }
+              const avg = Math.round(
+                scored.reduce((s, b) => s + Number(b.trustScore), 0) / scored.length
+              );
+              return (
+                <>
+                  <p className={`text-2xl font-extrabold mt-1 ${trustColor(avg)}`}>{avg} / 100</p>
+                  <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+                    Across {scored.length} scored {scored.length === 1 ? 'batch' : 'batches'}
+                  </span>
+                </>
+              );
+            })()}
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl">⭐</div>
         </div>

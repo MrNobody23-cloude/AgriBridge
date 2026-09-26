@@ -11,6 +11,10 @@ export default function FarmerDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [qrModalData, setQrModalData] = useState<{ code: string; url: string; qrDataUrl: string } | null>(null);
+  // What the last registration actually reported about the chain. Null until
+  // a batch has been registered, and a reason string when the batch was not
+  // anchored — which is the normal case unless a contract is deployed.
+  const [lastChainReason, setLastChainReason] = useState<string | null>(null);
 
   // Form State
   const [crop, setCrop] = useState('Alphonso Mango');
@@ -73,7 +77,23 @@ export default function FarmerDashboard() {
         const verifyUrl = `${window.location.origin}/verify/${newBatchCode}`;
         const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300, margin: 2 });
 
-        setSuccessMsg(`✓ Batch ${newBatchCode} successfully registered & recorded on Polygon Blockchain!`);
+        // Report what happened, not what we wish had happened. POST /api/batches
+        // returns the chain result as `json.data.blockchain`, carrying both
+        // `success` and a `reason` when nothing was written — so the message
+        // can say "registered" without claiming a chain write that never
+        // happened.
+        const chain = json.data.blockchain;
+        const anchored = chain?.success === true;
+        setLastChainReason(anchored ? null : (chain?.reason ?? 'Chain not configured'));
+        setSuccessMsg(
+          anchored
+            ? `✓ Batch ${newBatchCode} registered and anchored on-chain.`
+            : `✓ Batch ${newBatchCode} registered with a SHA-256 fingerprint${
+                chain?.reason
+                  ? ` — not anchored on-chain (${String(chain.reason).toLowerCase().replace(/_/g, ' ')})`
+                  : ''
+              }.`
+        );
         setQrModalData({ code: newBatchCode, url: verifyUrl, qrDataUrl });
         fetchBatches();
       } else {
@@ -88,14 +108,23 @@ export default function FarmerDashboard() {
 
   return (
     <DashboardLayout title="Farmer Dashboard">
-      {/* Top Banner Stats */}
+      {/* Top Banner Stats
+          This banner previously showed `batches.length || 5`, a hardcoded
+          "87 / 100" average trust score with a "Top 5% Nashik Region" ranking
+          that nothing computes, a hardcoded "₹13,02,000 Gross Revenue (YTD)"
+          with a "+32% Premium Export Price" delta, and a "Polygon Amoy / SHA-256
+          Verified" card asserting a live chain state that this page never
+          fetches. The six-month revenue chart had already been deleted from
+          the panel below for exactly the reason that revenue cannot be shown
+          here — there is no revenue, payment or price model in the schema — so
+          the rupee tile contradicted the disclaimer sitting beneath it. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Batches</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{batches.length || 5}</p>
-            <span className="text-[11px] font-semibold text-[#16a34a] inline-flex items-center gap-1 mt-1">
-              <span>↑</span> 100% Polygon Traceable
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{batches.length}</p>
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              {batches.length === 0 ? 'None registered yet' : 'Registered by you'}
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl font-bold">
@@ -106,10 +135,30 @@ export default function FarmerDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Trust Score</p>
-            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">87 / 100</p>
-            <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
-              Top 5% Nashik Region
-            </span>
+            {(() => {
+              const scored = batches.filter((b) => Number(b.trustScore) > 0);
+              if (scored.length === 0) {
+                return (
+                  <>
+                    <p className="text-2xl font-extrabold text-gray-400 mt-1">Not computed</p>
+                    <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
+                      Scores appear once a batch is assessed
+                    </span>
+                  </>
+                );
+              }
+              const avg = Math.round(
+                scored.reduce((s, b) => s + Number(b.trustScore), 0) / scored.length
+              );
+              return (
+                <>
+                  <p className="text-2xl font-extrabold text-[#16a34a] mt-1">{avg} / 100</p>
+                  <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
+                    Across {scored.length} scored {scored.length === 1 ? 'batch' : 'batches'}
+                  </span>
+                </>
+              );
+            })()}
           </div>
           <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl font-bold">
             ⭐
@@ -118,10 +167,10 @@ export default function FarmerDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gross Revenue (YTD)</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">₹13,02,000</p>
-            <span className="text-[11px] font-semibold text-[#16a34a] inline-flex items-center gap-1 mt-1">
-              <span>↑</span> +32% Premium Export Price
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Gross Revenue</p>
+            <p className="text-2xl font-extrabold text-gray-400 mt-1">Not tracked</p>
+            <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
+              This platform records no payments or sale prices
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl font-bold">
@@ -132,8 +181,15 @@ export default function FarmerDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Blockchain Status</p>
-            <p className="text-sm font-bold text-purple-700 mt-1">Polygon Amoy</p>
-            <span className="text-[11px] font-mono text-gray-400 block mt-0.5">SHA-256 Verified</span>
+            {/* Registration does return a chain result, so this is not a
+                hardcoded string: it reflects what the last registration
+                actually reported. */}
+            <p className={`text-sm font-bold mt-1 ${lastChainReason ? 'text-amber-700' : 'text-purple-700'}`}>
+              {lastChainReason ? 'Not anchored on-chain' : 'Anchored on-chain'}
+            </p>
+            <span className="text-[11px] font-mono text-gray-400 block mt-0.5">
+              {lastChainReason ?? 'SHA-256 recorded'}
+            </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl font-bold">
             ⛓️
@@ -150,7 +206,8 @@ export default function FarmerDashboard() {
               <span>📝</span> Register New Crop Batch
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
-              Generates an immutable SHA-256 hash & records on Polygon testnet.
+              Generates a SHA-256 fingerprint for the batch. On-chain anchoring
+              happens when a contract is deployed — the result below says which.
             </p>
           </div>
 
@@ -229,8 +286,7 @@ export default function FarmerDashboard() {
             >
               {submitting ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                  Recording on Blockchain...
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>                  Recording batch...
                 </>
               ) : (
                 '⛓️ Register & Mint Traceability Record'

@@ -61,45 +61,48 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Right Column: Signature Supply Chain Visual */}
+        {/* Right Column: The lifecycle, not a chain state
+            This panel previously rendered a hardcoded block height
+            ("Block #1849204") under a "Live Polygon Blockchain Supply Chain"
+            header with a pulsing dot, and a literal six-node array naming
+            Rajesh Kumar of Nashik, APMC Nashik Hub, AgriPro Global Ltd and
+            Al Maya Supermarket, each with its own invented 0x hash and a green
+            ✓. A visitor had no way to tell any of it from a real lookup. It
+            is now the set of roles a batch actually moves through, with no
+            hashes, no block number, and no verification tick. */}
         <div className="lg:col-span-6 bg-white p-6 rounded-2xl border border-gray-200 shadow-md space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-            <span className="text-xs font-extrabold text-[#1a1a1a] uppercase tracking-wider flex items-center gap-2">
-              <span className="pulsing-dot"></span> Live Polygon Blockchain Supply Chain
+            <span className="text-xs font-extrabold text-[#1a1a1a] uppercase tracking-wider">
+              One batch, end to end
             </span>
-            <span className="text-[11px] font-mono text-gray-400">Block #1849204</span>
+            <span className="text-[11px] text-gray-400">6 handover roles</span>
           </div>
 
-          {/* Connected Nodes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 relative">
             {[
-              { icon: '🌾', title: 'Farm', desc: 'Rajesh Kumar, Nashik', hash: '0x7f3a...89a2' },
-              { icon: '⚖️', title: 'Mandi', desc: 'APMC Nashik Hub', hash: '0x3b1c...90e1' },
-              { icon: '📦', title: 'Exporter', desc: 'AgriPro Global Ltd', hash: '0x9d4e...11c4' },
-              { icon: '🚢', title: 'Shipping', desc: 'JNPT Port to Dubai', hash: '0x5a2f...33b8' },
-              { icon: '🏪', title: 'Retailer', desc: 'Al Maya Supermarket', hash: '0x1c8b...44a9' },
-              { icon: '👤', title: 'Consumer', desc: 'Verified Authenticity', hash: '0x8e9d...77f1' },
-            ].map((node, i) => (
+              { icon: '🌾', title: 'Farmer', desc: 'Registers the harvest' },
+              { icon: '⚖️', title: 'Mandi', desc: 'Aggregates and grades' },
+              { icon: '📦', title: 'Exporter', desc: 'Prepares the shipment' },
+              { icon: '🚢', title: 'Transporter', desc: 'Holds the cold chain' },
+              { icon: '🏪', title: 'Retailer', desc: 'Shelves the produce' },
+              { icon: '👤', title: 'Consumer', desc: 'Scans and checks' },
+            ].map((node) => (
               <div
-                key={i}
+                key={node.title}
                 className="bg-[#FAFAF7] p-3 rounded-xl border border-gray-200 hover:border-[#16a34a] transition-all relative group shadow-2xs"
               >
                 <div className="text-2xl mb-1">{node.icon}</div>
                 <p className="text-xs font-extrabold text-[#1a1a1a]">{node.title}</p>
                 <p className="text-[10px] text-gray-500 font-medium truncate">{node.desc}</p>
-                <div className="mt-2 pt-1 border-t border-gray-200 flex items-center justify-between">
-                  <span className="text-[9px] font-mono text-[#16a34a] font-bold">{node.hash}</span>
-                  <span className="text-[9px] text-green-700 font-bold">✓</span>
-                </div>
               </div>
             ))}
           </div>
 
-          <div className="bg-green-50 p-3 rounded-xl border border-green-200 flex items-center justify-between text-xs">
-            <span className="font-bold text-green-900 flex items-center gap-1.5">
-              <span>🤖</span> Agentic AI Monitoring: <strong>Active 24/7</strong>
+          <div className="bg-[#FAFAF7] p-3 rounded-xl border border-gray-200 flex items-center justify-between text-xs">
+            <span className="font-semibold text-gray-600">
+              Every batch gets a SHA-256 fingerprint. Whether it reaches a
+              public chain depends on deployment — see <code className="font-mono">GET /api/health</code>.
             </span>
-            <span className="font-bold text-[#16a34a]">99.2% Fraud Proof</span>
           </div>
         </div>
       </section>
@@ -215,22 +218,22 @@ export default function LandingPage() {
               {
                 icon: '🔗',
                 title: 'Blockchain (Polygon)',
-                desc: 'Immutable record of every supply chain event',
+                desc: 'Batch fingerprints anchored on-chain when a contract is deployed',
               },
               {
                 icon: '🤖',
-                title: 'Agentic AI (LangGraph)',
-                desc: '7 autonomous agents monitoring 24/7',
+                title: 'Trained ML Agents',
+                desc: '6 trained classifiers scoring spoilage, quality, fraud and trust',
               },
               {
                 icon: '🧠',
                 title: 'Machine Learning',
-                desc: 'Predicts spoilage, fraud, and quality risks',
+                desc: 'XGBoost and Isolation Forest models with SHAP attributions',
               },
               {
                 icon: '📚',
                 title: 'RAG Compliance',
-                desc: 'Evidence-based regulatory guidance for 47 countries',
+                desc: 'Retrieval over a pinned compliance corpus, with citations',
               },
             ].map((pillar, i) => (
               <div key={i} className="bg-[#FAFAF7] p-6 rounded-xl border border-gray-200 hover:border-[#16a34a] transition-all">
@@ -252,10 +255,10 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
-            { step: '1', icon: '🌾', title: 'Farm Registration', desc: 'Farmer registers batch → Smart contract created on Polygon' },
-            { step: '2', icon: '🤖', title: 'AI Monitoring', desc: '7 Agentic AI agents monitor transactions, cold chain, and compliance' },
-            { step: '3', icon: '📊', title: 'Trust Scoring', desc: 'Real-time trust score calculated and updated at every stage' },
-            { step: '4', icon: '📱', title: 'Consumer QR Scan', desc: 'Consumer scans QR code to verify complete authenticated history' },
+            { step: '1', icon: '🌾', title: 'Farm Registration', desc: 'Farmer registers a batch and receives a SHA-256 fingerprint' },
+            { step: '2', icon: '🤖', title: 'AI Assessment', desc: '6 trained agents score the batch as events and readings arrive' },
+            { step: '3', icon: '📊', title: 'Trust Scoring', desc: 'Six weighted factors, each gated on the evidence behind it' },
+            { step: '4', icon: '📱', title: 'Consumer QR Scan', desc: 'Consumer scans a QR to read the recorded history and its trust score' },
           ].map((item, i) => (
             <div key={i} className="bg-white p-6 rounded-xl border border-gray-200 relative shadow-2xs">
               <div className="w-8 h-8 rounded-full bg-green-100 text-[#16a34a] font-extrabold text-xs flex items-center justify-center mb-3">

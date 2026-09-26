@@ -10,15 +10,17 @@ interface TempLog {
   location: string;
   timestamp: string;
   sensorId?: string;
+  /** The simulator writes rows with this flag set. A reading without it came
+      from a physical sensor. The two must not be displayed as one column. */
+  isSimulated?: boolean;
 }
 
 interface ColdChainStats {
   totalReadings: number;
-  avgTemperature: number;
-  minTemperature: number;
-  maxTemperature: number;
-  breachCount: number;
-  breachPercent: number;
+  simulatedReadings: number;
+  realReadings: number;
+  temperature: { min: number; max: number; avg: number; breaches: number; breachPercent: number } | null;
+  humidity: { min: number; max: number; avg: number } | null;
 }
 
 export default function TransporterDashboard() {
@@ -46,8 +48,12 @@ export default function TransporterDashboard() {
       const res = await fetch(`/api/iot/batches/${encodeURIComponent(target)}/history`);
       const json = await res.json();
       if (json.success) {
-        setHistory(json.data.logs || []);
-        setStats(json.data.stats || null);
+        // The route returns { batch, readings, summary }. This page read
+        // `json.data.logs` and `json.data.stats`, which that response has
+        // never contained, so the cold-chain table was permanently empty no
+        // matter what data existed. Corrected to the real keys.
+        setHistory(json.data.readings || []);
+        setStats(json.data.summary || null);
       }
     } catch (e) {
       console.error('Failed to load cold-chain history:', e);
@@ -132,7 +138,13 @@ export default function TransporterDashboard() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Cold-Chain Readings</p>
             <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{stats?.totalReadings ?? history.length}</p>
-            <span className="text-[11px] font-semibold text-[#16a34a] block mt-1">IoT Sensor Active</span>
+            {/* "IoT Sensor Active" was unconditional. The API splits readings
+                into sensor-reported and simulated, so the count of real
+                readings is known — report it rather than asserting a live
+                sensor exists. */}
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              {stats ? `${stats.realReadings} from sensors` : 'No readings yet'}
+            </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl">🌡️</div>
         </div>
@@ -140,7 +152,11 @@ export default function TransporterDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Temperature</p>
-            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">{stats ? `${stats.avgTemperature.toFixed(1)}°C` : '—'}</p>
+            {/* The summary nests temperature under `temperature`, not at the
+                top level as this page previously assumed. */}
+            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">
+              {stats?.temperature ? `${stats.temperature.avg.toFixed(1)}°C` : '—'}
+            </p>
             <span className="text-[11px] font-semibold text-gray-500 block mt-1">Target: 10–15°C</span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl">❄️</div>
@@ -149,11 +165,11 @@ export default function TransporterDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Temperature Breaches</p>
-            <p className={`text-2xl font-extrabold mt-1 ${(stats?.breachCount ?? 0) > 0 ? 'text-red-600' : 'text-[#16a34a]'}`}>
-              {stats?.breachCount ?? 0}
+            <p className={`text-2xl font-extrabold mt-1 ${(stats?.temperature?.breaches ?? 0) > 0 ? 'text-red-600' : 'text-[#16a34a]'}`}>
+              {stats?.temperature?.breaches ?? 0}
             </p>
             <span className="text-[11px] font-semibold text-gray-500 block mt-1">
-              {stats ? `${stats.breachPercent.toFixed(1)}% breach rate` : 'No data'}
+              {stats?.temperature ? `${stats.temperature.breachPercent}% breach rate` : 'No data'}
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-xl">⚠️</div>
@@ -163,7 +179,7 @@ export default function TransporterDashboard() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Cold-Chain Range</p>
             <p className="text-sm font-extrabold text-[#1a1a1a] mt-1">
-              {stats ? `${stats.minTemperature.toFixed(1)}°C – ${stats.maxTemperature.toFixed(1)}°C` : '—'}
+              {stats?.temperature ? `${stats.temperature.min.toFixed(1)}°C – ${stats.temperature.max.toFixed(1)}°C` : '—'}
             </p>
             <span className="text-[11px] font-semibold text-gray-500 block mt-1">Min / Max observed</span>
           </div>
@@ -251,8 +267,23 @@ export default function TransporterDashboard() {
         {/* Temperature Log Table */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[#1a1a1a]">🌡️ Real-time Cold-Chain Log</h3>
-            <span className="text-xs text-gray-500">{history.length} readings</span>
+            {/* This heading said "Real-time" and the table had no
+                simulated/real column, while /api/iot/simulator writes generated
+                readings into the same table with isSimulated set. The
+                simulator marks every row it writes, but that mark was dropped
+                here, so generated temperatures could be read as sensor
+                telemetry. The counts below come from the API's own split. */}
+            <h3 className="text-sm font-bold text-[#1a1a1a]">🌡️ Cold-Chain Log</h3>
+            <div className="flex items-center gap-3 text-xs">
+              {stats && stats.simulatedReadings > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold text-[11px]">
+                  {stats.simulatedReadings} simulated
+                </span>
+              )}
+              <span className="text-gray-500">
+                {stats ? `${stats.realReadings} sensor / ${history.length} total` : `${history.length} readings`}
+              </span>
+            </div>
           </div>
           <div className="overflow-y-auto max-h-[500px]">
             <table className="w-full text-left text-xs text-[#1a1a1a]">
@@ -270,11 +301,18 @@ export default function TransporterDashboard() {
                   <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-xs">No IoT readings found. Try loading a batch or running the simulator.</td></tr>
                 ) : (
                   history.map((log, idx) => (
-                    <tr key={log.id || idx} className="hover:bg-gray-50">
+                    <tr key={log.id || idx} className={log.isSimulated ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-gray-50'}>
                       <td className="py-2.5 px-4 font-mono text-[11px] text-gray-500">
                         {new Date(log.timestamp).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
                       </td>
-                      <td className="py-2.5 px-4 font-mono text-[11px] text-blue-600">{log.sensorId || '—'}</td>
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-blue-600">
+                        {log.sensorId || '—'}
+                        {log.isSimulated && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-[9px] uppercase">
+                            Simulated
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2.5 px-4">
                         <span className={`px-2 py-0.5 rounded-full font-extrabold text-[11px] ${getTempColor(log.temperature)}`}>
                           {log.temperature.toFixed(1)}°C

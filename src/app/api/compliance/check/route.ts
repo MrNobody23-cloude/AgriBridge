@@ -53,7 +53,12 @@ export async function POST(req: NextRequest) {
 
         const answer = String(ragResult.answer || '');
         const sources = (ragResult.sources as any[]) || [];
-        const confidence = Number(ragResult.confidence || 0.7);
+        // An unanswered check has no retrieval behind it, so it has no
+        // confidence to report. This defaulted to 0.7 whenever the AI service
+        // did not answer, which wrote a fabricated score into AiAgentLog and
+        // returned it to the exporter page as the strength of a check that
+        // never ran.
+        const confidence = ragResult.answer ? Number(ragResult.confidence || 0) : 0;
 
         // Parse compliance checks from RAG answer or fallback
         const passed = !answer.toLowerCase().includes('insufficient evidence') &&
@@ -65,8 +70,11 @@ export async function POST(req: NextRequest) {
             {
                 requirement: `Export compliance for ${validated.country}`,
                 status: passed ? 'PASSED' : 'PENDING',
+                // The citation names the document that was actually retrieved.
+                // With nothing retrieved there is no document, so it says so
+                // rather than naming a knowledge base that was never queried.
                 explanation: answer.slice(0, 500) || 'RAG analysis pending',
-                source: sources[0]?.source || 'AgriBridge RAG Knowledge Base',
+                source: sources[0]?.source || 'No regulatory source retrieved — RAG service did not respond',
             },
         ];
 

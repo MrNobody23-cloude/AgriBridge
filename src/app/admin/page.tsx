@@ -15,7 +15,6 @@ interface SysUser {
 export default function AdminDashboard() {
     const [users, setUsers] = useState<SysUser[]>([]);
     const [loading, setLoading] = useState(true);
-    const [statsLoading, setStatsLoading] = useState(true);
 
     const fetchUsers = async () => {
         try {
@@ -31,8 +30,6 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         fetchUsers();
-        // Simulate stats for now
-        setTimeout(() => setStatsLoading(false), 400);
     }, []);
 
     const roleBadgeColor: Record<string, string> = {
@@ -46,11 +43,15 @@ export default function AdminDashboard() {
         ADMIN: 'bg-red-100 text-red-700',
     };
 
+    // "Fraud Alerts: 12" and "Secure Routes: 24" were typed-in constants, and
+    // a 400ms setTimeout above was there to make them look as though they had
+    // loaded. Nothing on this page counts either, and there is no session
+    // table, so each tile now says so rather than inventing a figure.
     const statCards = [
         { label: 'Total Users', value: users.length || '–', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50/80' },
-        { label: 'Active Sessions', value: '–', icon: Activity, color: 'text-agro-green', bg: 'bg-green-50/80' },
-        { label: 'Fraud Alerts', value: '12', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50/80' },
-        { label: 'Secure Routes', value: '24', icon: Shield, color: 'text-purple-600', bg: 'bg-purple-50/80' },
+        { label: 'Active Sessions', value: 'Not tracked', icon: Activity, color: 'text-gray-500', bg: 'bg-gray-50/80' },
+        { label: 'Fraud Alerts', value: 'See regulator view', icon: AlertTriangle, color: 'text-gray-500', bg: 'bg-gray-50/80' },
+        { label: 'Protected Routes', value: 'Not tracked', icon: Shield, color: 'text-gray-500', bg: 'bg-gray-50/80' },
     ];
 
     return (

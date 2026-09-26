@@ -57,14 +57,23 @@ export default function RegulatorDashboard() {
 
   return (
     <DashboardLayout title="Regulator Dashboard">
-      {/* Top Banner Stats */}
+      {/* Top Banner Stats
+          All four tiles previously read `alerts.length || 3`, "100% Active",
+          "96.8%" against a "FSSAI / APEDA Standard" caption, and "24h SLA".
+          Three of those were typed-in constants and the fourth invented a
+          count of 3 whenever the fraud queue came back empty — so a regulator
+          opening the national fraud dashboard on a system with nothing to
+          report was shown three active alerts. Nothing in this file measures
+          an MRL compliance rate, so that number could not be derived from
+          anything on screen. The tiles now report what the queue actually
+          contains. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Fraud Alerts</p>
-            <p className="text-2xl font-extrabold text-red-600 mt-1">{alerts.length || 3}</p>
+            <p className="text-2xl font-extrabold text-red-600 mt-1">{alerts.length}</p>
             <span className="text-[11px] font-semibold text-red-600 block mt-1">
-              Requires Review
+              {alerts.length === 0 ? 'Queue is empty' : 'Requires Review'}
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-xl font-bold">
@@ -74,10 +83,14 @@ export default function RegulatorDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Duplicate Cert Scans</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">100% Active</p>
-            <span className="text-[11px] font-semibold text-[#16a34a] block mt-1">
-              SHA-256 Vector Engine
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Duplicate Cert Alerts</p>
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+              {alerts.filter((a) =>
+                String(a.alertType ?? a.type ?? '').toUpperCase().includes('DUPLICATE')
+              ).length}
+            </p>
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              Counted from this queue
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl font-bold">
@@ -87,10 +100,12 @@ export default function RegulatorDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">MRL Compliance Rating</p>
-            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">96.8%</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Alerts Dismissed</p>
+            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+              {alerts.filter((a) => String(a.status ?? '').toUpperCase() === 'FALSE_POSITIVE').length}
+            </p>
             <span className="text-[11px] font-semibold text-gray-500 block mt-1">
-              FSSAI / APEDA Standard
+              Marked false positive
             </span>
           </div>
           <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl font-bold">
@@ -100,14 +115,18 @@ export default function RegulatorDashboard() {
 
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Audit Investigation Rate</p>
-            <p className="text-2xl font-extrabold text-blue-600 mt-1">24h SLA</p>
-            <span className="text-[11px] font-semibold text-blue-600 block mt-1">
-              National Oversight
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">MRL Compliance Rating</p>
+            {/* Nothing in this codebase computes a national MRL compliance
+                rate, and no residue or limit check is persisted per batch, so
+                this reports itself as not measured rather than showing a
+                number attributed to FSSAI/APEDA. */}
+            <p className="text-2xl font-extrabold text-gray-400 mt-1">Not measured</p>
+            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
+              No residue testing is recorded
             </span>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl font-bold">
-            📋
+          <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl font-bold">
+            ⚖️
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
 
@@ -22,6 +22,30 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
   const title = propTitle || pageTitles[pathname] || 'Dashboard';
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [aiStatus, setAiStatus] = useState<'checking' | 'healthy' | 'down'>('checking');
+
+  // Ask the health endpoint rather than assuming the AI service is up. The
+  // badge stays amber — not red, not green — whenever the answer is unknown.
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch('/api/health');
+        const json = await res.json();
+        if (cancelled) return;
+        const status = json?.data?.services?.ml?.status;
+        setAiStatus(status === 'healthy' ? 'healthy' : 'down');
+      } catch {
+        if (!cancelled) setAiStatus('down');
+      }
+    };
+    check();
+    const timer = setInterval(check, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -53,10 +77,29 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
         </div>
 
-        {/* AI Tracker & Notifications */}
+        {/* AI Tracker & Notifications
+            This badge previously read "AI Operational" with a pulsing green dot
+            on every page, unconditionally. Nothing was fetched and nothing was
+            checked, so it asserted that the Python ML service was up on a
+            machine where it was not running. It now asks /api/health and
+            reports what came back; while the answer is in flight it says
+            nothing rather than guessing. */}
         <div className="flex items-center gap-3">
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-white/50 border border-green-200/50 rounded-full text-[10px] font-bold text-agro-green shadow-xs">
-            <span className="pulsing-dot"></span> AI Operational
+          <div
+            className={`hidden lg:flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold shadow-xs ${
+              aiStatus === 'healthy'
+                ? 'bg-white/50 border border-green-200/50 text-agro-green'
+                : aiStatus === 'checking'
+                  ? 'bg-white/50 border border-gray-200/50 text-gray-500'
+                  : 'bg-amber-50 border border-amber-200 text-amber-700'
+            }`}
+          >
+            {aiStatus === 'healthy' && <span className="pulsing-dot"></span>}
+            {aiStatus === 'healthy'
+              ? 'AI Operational'
+              : aiStatus === 'checking'
+                ? 'Checking AI…'
+                : 'AI Not Running'}
           </div>
 
           <div className="relative">

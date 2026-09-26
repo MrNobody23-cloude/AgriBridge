@@ -90,7 +90,9 @@ export async function POST(req: NextRequest) {
                 task: `Answer consumer query for batch ${batch.batchCode}`,
                 input: query,
                 output: String(aiResponse.answer || 'AI service unavailable'),
-                confidence: Number(aiResponse.confidence || 0.5),
+                // 0 when the service did not answer. It previously defaulted to
+                // 0.5, recording mid-confidence in a run that produced nothing.
+                confidence: Number(aiResponse.confidence || 0),
                 status: 'ANSWERED',
                 toolsUsed: JSON.stringify(aiResponse.toolsUsed || []),
             },
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
             answer: aiResponse.answer || `Batch ${batch.batchCode} (${batch.product.name}) has been verified. Trust score: ${batch.trustScore}/100. Blockchain status: ${chainV.status}.`,
             evidence: aiResponse.evidence || [],
             sources: aiResponse.sources || [],
-            confidence: aiResponse.confidence || 0.75,
+            confidence: aiResponse.confidence || 0,
             toolsUsed: aiResponse.toolsUsed || ['database_lookup', 'blockchain_verify'],
             batchSummary: {
                 batchCode: batch.batchCode,
