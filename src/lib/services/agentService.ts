@@ -1,219 +1,342 @@
 import { prisma } from '@/lib/prisma';
 import { runFraudScan } from './fraudDetectionService';
 import { calculateTrustScore } from './trustScoreService';
-import { predictSpoilage } from './spoilageService';
+import { predictSpoilage as heuristicSpoilage } from './spoilageService';
+
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export interface AgentResponse {
     agentName: string;
     agentType: 'supervisor' | 'fraud' | 'compliance' | 'traceability' | 'quality' | 'spoilage' | 'consumer';
-    status: 'PASSED' | 'FLAGGED' | 'COMPLETED' | 'HIGH_RISK' | 'ANSWERED' | 'CONFLICT';
+    status: 'PASSED' | 'FLAGGED' | 'COMPLETED' | 'HIGH_RISK' | 'ANSWERED' | 'CONFLICT' | 'PENDING';
     title: string;
     details: string;
     confidence: number;
+    sources?: unknown[];
+    data?: unknown;
+    toolsUsed?: string[];
 }
 
-// RAG International Regulatory Knowledge Base
-const REGULATORY_KNOWLEDGE_BASE: Record<string, { country: string; requirement: string; mrl: string; doc: string }[]> = {
-    UK: [
-        { country: 'UK', requirement: 'Phytosanitary Certification', mrl: 'APEDA EC 396/2005 compliant', doc: 'UK Plant Health Act 2020' },
-        { country: 'UK', requirement: 'Chlorpyrifos Residue Limit', mrl: 'Max 0.01 mg/kg', doc: 'UK HSE Pesticide Guidance' },
-    ],
-    UAE: [
-        { country: 'UAE', requirement: 'Halal & FSSAI Export Permit', mrl: 'Zero synthetic chemical residue', doc: 'UAE MOEI Standard 1928' },
-        { country: 'UAE', requirement: 'Reefer Cold Chain Logging', mrl: 'Continuous log at 12°C-14°C', doc: 'Dubai Municipality Food Safety' },
-    ],
-    USA: [
-        { country: 'USA', requirement: 'FDA FSMA Import Verification', mrl: 'Sub-ppm heavy metal screening', doc: 'US FDA Food Safety Modernization Act' },
-        { country: 'USA', requirement: 'USDA APHIS Permit', mrl: 'Vapor heat treatment certificate', doc: 'USDA Plant Protection Act' },
-    ],
-    JAPAN: [
-        { country: 'Japan', requirement: 'Positive List System MRL', mrl: 'Max 0.01 ppm for organophosphates', doc: 'Japan MHLW Food Sanitation Act' },
-    ],
-};
-
 /**
- * Compliance Agent (RAG Service)
+ * Compliance Agent — delegates to Python RAG service.
+ * Falls back to heuristic if Python service is unavailable.
  */
 export async function checkComplianceRAG(
     country: string,
-    batchId?: string
-): Promise<{ country: string; passed: boolean; checks: any[]; summary: string }> {
-    const normCountry = country.toUpperCase();
-    const rules = REGULATORY_KNOWLEDGE_BASE[normCountry] || [
-        { country, requirement: 'Standard APEDA Export Permit', mrl: 'FSSAI Grade A standard', doc: 'International Codex Alimentarius' },
-    ];
+    batchId?: string,
+    shipmentId?: string
+): Promise<{ country: string; passed: boolean; checks: unknown[]; summary: string; sources?: unknown[] }> {
+    let batch: { product?: { name?: string } } | null = null;
+    if (batchId) {
+        batch = await prisma.batch.findFirst({
+            where: { OR: [{ id: batchId }, { batchCode: batchId }] },
+            include: { product: true },
+        }) as any;
+    }
 
-    const checks = rules.map((r) => ({
-        country: r.country,
-        requirement: r.requirement,
-        status: 'PASSED',
-        explanation: `Verified against ${r.doc}. MRL Standard: ${r.mrl}.`,
-        source: r.doc,
-    }));
+    const crop = (batch as any)?.product?.name || 'General Agriculture';
 
-    const summary = `RAG Compliance Agent evaluated ${rules.length} regulatory requirements for export to ${country}. 100% requirements passed.`;
+    try {
+        const res = await fetch(`${AI_SERVICE_URL}/api/rag/compliance/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ country, crop, batchId, shipmentId }),
+            signal: AbortSignal.timeout(20000),
+        });
+        if (res.ok) {
+            const data = await res.json() as Record<string, unknown>;
+            const answer = String(data.answer || '');
+            const sources = (data.sources as unknown[]) || [];
+            const passed = !answer.toLowerCase().includes('insufficient evidence') && answer.length > 20;
+            const checks = [{
+                country,
+                requirement: `Export compliance: ${country}`,
+                status: passed ? 'PASSED' : 'PENDING',
+                explanation: answer.slice(0, 500),
+                source: (sources[0] as any)?.source || 'AgriBridge RAG Knowledge Base',
+                evidence: data.evidence,
+            }];
+            const summary = `RAG Compliance Agent retrieved regulatory evidence for export to ${country}. Confidence: ${Math.round(Number(data.confidence || 0) * 100)}%.`;
 
-    await prisma.aiAgentLog.create({
-        data: {
-            agentName: 'Compliance Agent (RAG)',
-            task: `Regulatory Screening for Export to ${country}`,
-            input: `Country: ${country}, Batch: ${batchId || 'N/A'}`,
-            output: summary,
-            confidence: 0.98,
-            status: 'PASSED',
-        },
-    });
+            await prisma.aiAgentLog.create({
+                data: {
+                    agentName: 'Compliance Agent (RAG)',
+                    agentType: 'compliance',
+                    task: `Regulatory Screening for Export to ${country}`,
+                    input: `Country: ${country}, Batch: ${batchId || 'N/A'}`,
+                    output: summary,
+                    confidence: Number(data.confidence || 0.85),
+                    status: passed ? 'PASSED' : 'PENDING',
+                    sources: JSON.stringify(sources),
+                },
+            });
+            return { country, passed, checks, summary, sources };
+        }
+    } catch (err: any) {
+        console.warn(`[ComplianceAgent] RAG service unavailable: ${err.message}`);
+    }
 
-    return { country, passed: true, checks, summary };
+    // Fallback: return honest "service unavailable" response
+    return {
+        country,
+        passed: false,
+        checks: [{
+            country,
+            requirement: 'Export compliance check',
+            status: 'PENDING',
+            explanation: 'RAG compliance service temporarily unavailable. Manual regulatory review required.',
+            source: 'N/A',
+        }],
+        summary: `Compliance check for ${country} pending — AI service temporarily unavailable.`,
+    };
 }
 
 /**
- * Consumer Trust Agent - Verified Q&A Bot
+ * Consumer Trust Agent — delegates to Python RAG + Gemini.
  */
 export async function answerConsumerQuery(
     batchCode: string,
     userQuery: string
-): Promise<{ answer: string; checkpoints: number; trustScore: number; verifiedOnChain: boolean }> {
+): Promise<{ answer: string; checkpoints: number; trustScore: number; verifiedOnChain: boolean; sources?: unknown[]; confidence?: number }> {
     const batch = await prisma.batch.findFirst({
         where: { OR: [{ batchCode }, { id: batchCode }] },
-        include: { product: true, events: true, farmer: true },
+        include: { product: true, events: true, farmer: { include: { farmerProfile: true } }, certificates: true, trustScoreDetails: true },
     });
 
     if (!batch) {
         return {
-            answer: `Batch ${batchCode} could not be found in our supply chain ledger. Please verify the QR code on your package.`,
+            answer: `Batch ${batchCode} could not be found in the supply chain ledger. Please verify the QR code on your package.`,
             checkpoints: 0,
             trustScore: 0,
             verifiedOnChain: false,
         };
     }
 
-    const queryLower = userQuery.toLowerCase();
-    let answer = `Yes! Batch ${batch.batchCode} (${batch.product.name}) produced by ${batch.farmer.name} in ${batch.location} is 100% authentic. It has ${batch.events.length || 4} verified supply chain checkpoints recorded on the Polygon blockchain.`;
+    const { verifyBatchOnChain } = await import('@/lib/blockchain');
+    const chainV = await verifyBatchOnChain(batch.batchCode, batch.blockchainHash);
 
-    if (queryLower.includes('organic') || queryLower.includes('pesticide')) {
-        answer = `Batch ${batch.batchCode} is certified organic under GLOBALG.A.P and APEDA standards. Lab tests confirmed zero pesticide residue residues above international safe limits.`;
-    } else if (queryLower.includes('farmer') || queryLower.includes('origin') || queryLower.includes('where')) {
-        answer = `This crop was grown by ${batch.farmer.name} at Kumar Organic Farms in ${batch.location}, harvested on ${new Date(batch.harvestDate).toLocaleDateString()}.`;
-    } else if (queryLower.includes('trust') || queryLower.includes('score')) {
-        answer = `Batch ${batch.batchCode} has a verified Trust Score of ${batch.trustScore}/100 based on blockchain proof, certificate audit, and cold chain temperature logs.`;
+    const batchContext = {
+        batchCode: batch.batchCode,
+        product: batch.product.name,
+        origin: batch.location,
+        harvestDate: batch.harvestDate,
+        status: batch.status,
+        farmerName: batch.farmer.name,
+        farmName: batch.farmer.farmerProfile?.farmName,
+        farmLocation: batch.farmer.farmerProfile?.location,
+        blockchainVerified: chainV.verified,
+        blockchainStatus: chainV.status,
+        certificatesCount: batch.certificates.length,
+        certificatesVerified: batch.certificates.filter(c => c.verificationStatus === 'VERIFIED').length,
+        supplyChainEvents: batch.events.length,
+        trustScore: batch.trustScore,
+    };
+
+    let answer = '';
+    let sources: unknown[] = [];
+    let confidence = 0.75;
+
+    try {
+        const res = await fetch(`${AI_SERVICE_URL}/api/agents/consumer/answer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batchCode: batch.batchCode, query: userQuery, batchData: batchContext }),
+            signal: AbortSignal.timeout(25000),
+        });
+        if (res.ok) {
+            const data = await res.json() as Record<string, unknown>;
+            answer = String(data.answer || '');
+            sources = (data.sources as unknown[]) || [];
+            confidence = Number(data.confidence || 0.75);
+        }
+    } catch (err: any) {
+        console.warn(`[ConsumerAgent] AI service unavailable: ${err.message}`);
+    }
+
+    if (!answer) {
+        // Honest fallback using real DB data (no hallucination)
+        answer = `Batch ${batch.batchCode} (${batch.product.name}) was produced by ${batch.farmer.name} in ${batch.location}. Blockchain status: ${chainV.status}. Trust score: ${batch.trustScore}/100. ${batch.events.length} supply chain events recorded.`;
     }
 
     await prisma.aiAgentLog.create({
         data: {
             agentName: 'Consumer Trust Agent',
-            task: `Answer Query for Batch ${batch.batchCode}`,
+            agentType: 'consumer',
+            task: `Answer consumer query for ${batch.batchCode}`,
             input: userQuery,
             output: answer,
-            confidence: 0.97,
+            confidence,
             status: 'ANSWERED',
         },
     });
 
     return {
         answer,
-        checkpoints: batch.events.length || 4,
+        checkpoints: batch.events.length,
         trustScore: batch.trustScore,
-        verifiedOnChain: true,
+        verifiedOnChain: chainV.verified,
+        sources,
+        confidence,
     };
 }
 
 /**
- * Supervisor Agent - Orchestrate all 7 agents on a batch
+ * Supervisor Agent — orchestrates all sub-agents.
+ * Delegates ML/RAG work to Python service; uses real DB data.
  */
 export async function runSupervisorOrchestration(batchId: string): Promise<AgentResponse[]> {
     const responses: AgentResponse[] = [];
 
     const batch = await prisma.batch.findFirst({
         where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-        include: { product: true, certificates: true, events: true },
+        include: {
+            product: true,
+            certificates: true,
+            events: { orderBy: { timestamp: 'asc' } },
+            farmer: { include: { farmerProfile: true } },
+            fraudAlerts: true,
+            trustScoreDetails: true,
+            temperatureLogs: { orderBy: { timestamp: 'desc' }, take: 50 },
+            shipments: { include: { complianceChecks: true, exporter: { select: { name: true } } } },
+        },
     });
-
     if (!batch) return responses;
 
-    // 1. Traceability Agent
-    responses.push({
-        agentName: '🔍 Traceability Agent',
-        agentType: 'traceability',
-        status: 'PASSED',
-        title: `Ownership chain verified for ${batch.batchCode}`,
-        details: `${batch.events.length || 4} chain events confirmed | Hash ${batch.blockchainHash.slice(0, 10)}... | AUTHENTIC`,
-        confidence: 0.99,
-    });
+    // Verify blockchain
+    const { verifyBatchOnChain } = await import('@/lib/blockchain');
+    const chainV = await verifyBatchOnChain(batch.batchCode, batch.blockchainHash);
 
-    // 2. Fraud Detection Agent
-    const fraudScans = await runFraudScan(batch.id);
-    if (fraudScans.length > 0) {
-        responses.push({
-            agentName: '🚨 Fraud Detection Agent',
-            agentType: 'fraud',
-            status: 'FLAGGED',
-            title: fraudScans[0].description,
-            details: `Severity: ${fraudScans[0].severity} | Action: FLAGGED | Escalated to Regulator Dashboard`,
-            confidence: fraudScans[0].confidence,
+    // Try Python AI service for full orchestration
+    let pythonResult: Record<string, unknown> | null = null;
+    try {
+        const batchContext = {
+            batchCode: batch.batchCode,
+            product: { name: batch.product.name },
+            location: batch.location,
+            harvestDate: batch.harvestDate,
+            status: batch.status,
+            trustScore: batch.trustScore,
+            blockchainHash: batch.blockchainHash,
+            destinationCountry: batch.destinationCountry || batch.shipments[0]?.destinationCountry,
+            events: batch.events,
+            certificates: batch.certificates,
+            fraudAlerts: batch.fraudAlerts,
+            temperatureLogs: batch.temperatureLogs,
+            shipments: batch.shipments,
+            chainVerification: chainV,
+        };
+        const res = await fetch(`${AI_SERVICE_URL}/api/agents/orchestrate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batchId: batch.batchCode, batchData: batchContext, sensorData: batch.temperatureLogs }),
+            signal: AbortSignal.timeout(45000),
         });
+        if (res.ok) pythonResult = await res.json() as Record<string, unknown>;
+    } catch (err: any) {
+        console.warn(`[Supervisor] Python AI service unavailable: ${err.message}. Using fallback.`);
+    }
+
+    if (pythonResult?.agentResponses) {
+        // Use Python service results directly
+        const pythonResponses = pythonResult.agentResponses as AgentResponse[];
+        responses.push(...pythonResponses);
     } else {
+        // Fallback: run TypeScript-side agents
+
+        // 1. Traceability
+        responses.push({
+            agentName: '🔍 Traceability Agent',
+            agentType: 'traceability',
+            status: chainV.verified ? 'PASSED' : 'FLAGGED',
+            title: `${batch.events.length} supply chain events recorded`,
+            details: `Blockchain: ${chainV.status} | ${batch.events.length} events | Hash: ${batch.blockchainHash.slice(0, 16)}...`,
+            confidence: chainV.verified ? 0.99 : 0.70,
+            toolsUsed: ['verify_blockchain', 'get_supply_chain_events'],
+        });
+
+        // 2. Fraud Detection (real rules)
+        const fraudScans = await runFraudScan(batch.id);
+        const openFraud = batch.fraudAlerts.filter(f => f.status !== 'RESOLVED' && f.status !== 'FALSE_POSITIVE');
         responses.push({
             agentName: '🚨 Fraud Detection Agent',
             agentType: 'fraud',
-            status: 'PASSED',
-            title: `Zero fraud signatures detected for ${batch.batchCode}`,
-            details: `Certificate Hash Scan Passed | Blockchain Timestamp Validated`,
-            confidence: 0.97,
+            status: openFraud.length > 0 ? 'FLAGGED' : 'PASSED',
+            title: openFraud.length > 0 ? `${openFraud.length} fraud alert(s) detected` : 'No fraud signatures detected',
+            details: openFraud.length > 0
+                ? `${openFraud[0].description} (Confidence: ${Math.round(openFraud[0].confidence * 100)}%)`
+                : `Certificate hash scan passed | ${batch.certificates.length} certificate(s) verified`,
+            confidence: openFraud.length > 0 ? openFraud[0].confidence : 0.97,
+            toolsUsed: ['check_certificates', 'verify_blockchain', 'temperature_analysis'],
+        });
+
+        // 3. Spoilage (heuristic fallback when Python unavailable)
+        const spoilageResult = await heuristicSpoilage(
+            batch.product.name,
+            batch.temperatureLogs.length > 0
+                ? batch.temperatureLogs.reduce((s, t) => s + t.temperature, 0) / batch.temperatureLogs.length
+                : 12.5,
+            Math.floor((Date.now() - new Date(batch.harvestDate).getTime()) / (1000 * 60 * 60 * 24)),
+            batch.harvestDate
+        );
+        responses.push({
+            agentName: '🦠 Spoilage Prediction Agent',
+            agentType: 'spoilage',
+            status: spoilageResult.spoilageRisk === 'HIGH' || spoilageResult.spoilageRisk === 'CRITICAL' ? 'HIGH_RISK' : 'COMPLETED',
+            title: `Spoilage risk: ${spoilageResult.spoilageRisk} — ${spoilageResult.remainingDays} days remaining`,
+            details: `${spoilageResult.explanation} ${spoilageResult.recommendation.slice(0, 80)}`,
+            confidence: 0.85,
+            toolsUsed: ['heuristic_spoilage_model', 'sensor_data'],
+        });
+
+        // 4. Compliance
+        const destination = batch.destinationCountry || batch.shipments[0]?.destinationCountry || 'UK';
+        const complianceResult = await checkComplianceRAG(destination, batch.id);
+        responses.push({
+            agentName: '⚖️ Compliance Agent',
+            agentType: 'compliance',
+            status: complianceResult.passed ? 'PASSED' : 'PENDING',
+            title: `Compliance check: ${destination}`,
+            details: complianceResult.summary,
+            confidence: 0.88,
+            toolsUsed: ['rag_retrieval', 'regulatory_knowledge_base'],
+        });
+
+        // 5. Quality (honest about source when Python unavailable)
+        const certCount = batch.certificates.filter(c => c.verificationStatus === 'VERIFIED').length;
+        responses.push({
+            agentName: '⭐ Quality Intelligence Agent',
+            agentType: 'quality',
+            status: 'COMPLETED',
+            title: `Quality assessment: ${certCount} certificate(s) verified`,
+            details: `Quality ML model requires Python AI service. ${certCount}/${batch.certificates.length} certificates verified. Run /api/ml/quality for XGBoost prediction.`,
+            confidence: 0.70,
+            toolsUsed: ['check_certificates'],
+        });
+
+        // 6. Consumer readiness
+        responses.push({
+            agentName: '👤 Consumer Trust Agent',
+            agentType: 'consumer',
+            status: 'ANSWERED',
+            title: `QR verification ready — Trust Score ${batch.trustScore}/100`,
+            details: `Consumer can verify this batch at /verify/${batch.batchCode}. ${chainV.verified ? 'Blockchain verified.' : 'Blockchain pending.'}`,
+            confidence: 0.96,
+            toolsUsed: ['get_batch', 'verify_blockchain'],
         });
     }
 
-    // 3. Spoilage Prediction Agent
-    const spoilage = await predictSpoilage(batch.product.name, 12.5, 3, batch.harvestDate);
-    responses.push({
-        agentName: '🦠 Spoilage Prediction Agent',
-        agentType: 'spoilage',
-        status: spoilage.spoilageRisk === 'HIGH' || spoilage.spoilageRisk === 'CRITICAL' ? 'HIGH_RISK' : 'COMPLETED',
-        title: `Shelf life estimated for ${batch.batchCode}: ${spoilage.remainingDays} days`,
-        details: `Confidence: ${Math.round(spoilage.probability * 100)}% | Risk: ${spoilage.spoilageRisk} | ${spoilage.recommendation.slice(0, 70)}...`,
-        confidence: 0.91,
-    });
-
-    // 4. Compliance Agent
-    const compliance = await checkComplianceRAG('UK', batch.batchCode);
-    responses.push({
-        agentName: '⚖️ Compliance Agent',
-        agentType: 'compliance',
-        status: 'PASSED',
-        title: `UK Phytosanitary compliance verified for ${batch.batchCode}`,
-        details: compliance.summary,
-        confidence: 0.98,
-    });
-
-    // 5. Quality Intelligence Agent
-    responses.push({
-        agentName: '⭐ Quality Intelligence Agent',
-        agentType: 'quality',
-        status: 'COMPLETED',
-        title: `Quality grade assessment complete for ${batch.batchCode}`,
-        details: `Grade A Premium Export Standard | Color Uniformity 94%`,
-        confidence: 0.92,
-    });
-
-    // 6. Consumer Trust Agent
-    responses.push({
-        agentName: '👤 Consumer Trust Agent',
-        agentType: 'consumer',
-        status: 'ANSWERED',
-        title: `Consumer QR verification readiness confirmed for ${batch.batchCode}`,
-        details: `Trust Score: ${batch.trustScore}/100 | Ready for Instant Scanning`,
-        confidence: 0.96,
-    });
-
-    // 7. Supervisor Agent Log
+    // Supervisor log
+    const flagged = responses.filter(r => r.status === 'FLAGGED' || r.status === 'HIGH_RISK');
     await prisma.aiAgentLog.create({
         data: {
             agentName: 'Supervisor Agent',
-            task: `Multi-Agent Orchestration on Batch ${batch.batchCode}`,
-            input: `Batch ID: ${batch.batchCode}`,
-            output: `Completed 7-Agent scan pipeline. Status: ${fraudScans.length > 0 ? 'FLAGGED' : 'PASSED'}`,
+            agentType: 'supervisor',
+            task: `Multi-Agent Orchestration: ${batch.batchCode}`,
+            input: JSON.stringify({ batchId: batch.batchCode }),
+            output: `${responses.length}-agent pipeline. Status: ${flagged.length > 0 ? 'FLAGGED' : 'PASSED'}. ${flagged.length} issue(s).`,
             confidence: 0.98,
-            status: fraudScans.length > 0 ? 'FLAGGED' : 'PASSED',
+            status: flagged.length > 0 ? 'FLAGGED' : 'PASSED',
+            toolsUsed: JSON.stringify(['python_ai_service', 'fraud_detector', 'compliance_rag']),
         },
     });
 

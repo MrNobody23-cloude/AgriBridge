@@ -1,0 +1,31 @@
+{
+    "precision": 0.7445652173913043,
+    "recall": 0.8203592814371258,
+    "f1_score": 0.7806267806267806,
+    "roc_auc": 0.7979829814056099,
+    "confusion_matrix": [
+        [
+            86,
+            47
+        ],
+        [
+            30,
+            137
+        ]
+    ],
+    "test_samples": 300,
+    "top_features_by_coefficient": [
+        "compliance_status",
+        "fraud_flagged",
+        "traceability_confidence",
+        "spoilage_risk_pct",
+        "quality_score"
+    ],
+    "coefficients": [
+        1.0265,
+        -0.8929,
+        0.4481,
+        -0.189,
+        0.1504
+    ]
+}

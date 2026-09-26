@@ -21,14 +21,14 @@ const defaultRows: BatchRow[] = [
 
 export default function BatchTable({ rows = defaultRows }: { rows?: BatchRow[] }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+    <div className="glass-card overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 className="text-base font-bold text-[#1a1a1a]">Recent Crop Batches</h3>
         <span className="text-xs font-medium text-gray-500">Showing {rows.length} batches</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs text-[#1a1a1a]">
-          <thead className="bg-[#FAFAF7] text-gray-500 font-semibold border-b border-gray-200 uppercase text-[11px] tracking-wider">
+          <thead className="bg-white/10 text-gray-500 font-semibold border-b border-gray-200/50 uppercase text-[11px] tracking-wider">
             <tr>
               <th className="py-3 px-4">Batch ID</th>
               <th className="py-3 px-4">Crop</th>
@@ -39,7 +39,7 @@ export default function BatchTable({ rows = defaultRows }: { rows?: BatchRow[] }
               <th className="py-3 px-4 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100/50">
             {rows.map((row, idx) => {
               let scoreBadgeColor = 'bg-green-100 text-[#16a34a] border-green-200';
               if (row.trustScore < 50) scoreBadgeColor = 'bg-red-100 text-red-700 border-red-200';
@@ -52,8 +52,8 @@ export default function BatchTable({ rows = defaultRows }: { rows?: BatchRow[] }
               else if (row.status === 'Flagged') statusColor = 'bg-red-100 text-red-800';
 
               return (
-                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-[#FAFAF7]/50 hover:bg-gray-50'}>
-                  <td className="py-3 px-4 font-mono font-bold text-[#16a34a]">{row.id}</td>
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white/30 hover:bg-white/50 transition-colors' : 'bg-transparent hover:bg-white/40 transition-colors'}>
+                  <td className="py-3 px-4 font-mono font-bold text-agro-green">{row.id}</td>
                   <td className="py-3 px-4 font-semibold text-[#1a1a1a]">{row.crop}</td>
                   <td className="py-3 px-4 text-gray-600">{row.qty}</td>
                   <td className="py-3 px-4 text-gray-600">{row.harvestDate}</td>

@@ -1,13 +1,27 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/auth';
 import { createShipmentSchema } from '@/lib/validators';
 import { checkComplianceRAG } from '@/lib/services/agentService';
 import { runFraudScan } from '@/lib/services/fraudDetectionService';
 import { successResponse, errorResponse } from '@/lib/response';
+import { createAuditLog } from '@/lib/auditLog';
 
 export async function GET(req: NextRequest) {
+    const authResult = await requirePermission(req, 'shipment:read');
+    if (authResult instanceof Response) return authResult;
+    const { user } = authResult;
+
     try {
+        // Ownership scoping: exporters only see their own shipments;
+        // regulators/admins/importers/transporters see all.
+        const where: any = {};
+        if (user.role === 'EXPORTER') {
+            where.exporterId = user.id;
+        }
+
         const shipments = await prisma.shipment.findMany({
+            where,
             orderBy: { createdAt: 'desc' },
             include: {
                 batch: { include: { product: true, farmer: true } },
@@ -25,6 +39,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+    const authResult = await requirePermission(req, 'shipment:create');
+    if (authResult instanceof Response) return authResult;
+    const { user } = authResult;
+
     try {
         const body = await req.json();
         const validated = createShipmentSchema.parse(body);
@@ -37,8 +55,8 @@ export async function POST(req: NextRequest) {
             return errorResponse('Batch not found', 'BATCH_NOT_FOUND', 404);
         }
 
-        let exporter = await prisma.user.findFirst({ where: { role: 'EXPORTER' } });
-        if (!exporter) exporter = await prisma.user.findFirst();
+        // The authenticated exporter owns this shipment — never guess from the DB.
+        const exporterId = user.id;
 
         const count = await prisma.shipment.count();
         const shipmentCode = `EX-${1924 + count}`;
@@ -47,7 +65,7 @@ export async function POST(req: NextRequest) {
             data: {
                 shipmentCode,
                 batchId: batch.id,
-                exporterId: exporter!.id,
+                exporterId,
                 destinationCountry: validated.destinationCountry,
                 quantity: validated.quantity,
                 status: 'In Transit',
@@ -58,7 +76,7 @@ export async function POST(req: NextRequest) {
 
         // Run Compliance RAG checks automatically for destination country
         const ragRes = await checkComplianceRAG(validated.destinationCountry, batch.batchCode);
-        for (const check of ragRes.checks) {
+        for (const check of ragRes.checks as Array<{ country: string; requirement: string; status: string; explanation: string; source: string }>) {
             await prisma.complianceCheck.create({
                 data: {
                     shipmentId: newShipment.id,
@@ -76,7 +94,7 @@ export async function POST(req: NextRequest) {
             data: {
                 batchId: batch.id,
                 eventType: 'EXPORTED',
-                actorId: exporter!.id,
+                actorId: exporterId,
                 location: `Port of Export (Dest: ${validated.destinationCountry})`,
                 metadata: `Shipment ${shipmentCode} created for ${validated.quantity} kg`,
             },
@@ -84,6 +102,14 @@ export async function POST(req: NextRequest) {
 
         // Run Fraud Detection
         const fraudAlerts = await runFraudScan(batch.id, newShipment.id);
+
+        await createAuditLog({
+            userId: user.id,
+            action: 'SHIPMENT_CREATED',
+            resource: 'Shipment',
+            resourceId: newShipment.id,
+            metadata: JSON.stringify({ shipmentCode, batchCode: batch.batchCode, destinationCountry: validated.destinationCountry }),
+        });
 
         return successResponse({
             shipment: newShipment,

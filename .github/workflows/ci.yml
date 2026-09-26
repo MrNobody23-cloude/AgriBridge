@@ -1,0 +1,150 @@
+name: AgriBridge AI — CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ── Lint & Type Check ──────────────────────────────────────────────────────
+  lint-frontend:
+    name: Lint & Type Check (Next.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
+  lint-python:
+    name: Lint (Python AI Service)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install linter
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check ai-service/
+
+  # ── Tests ──────────────────────────────────────────────────────────────────
+  test-frontend:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Setup test database
+        run: |
+          cp .env.example .env
+          echo 'DATABASE_URL="file:./test.db"' >> .env
+          echo 'AUTH_SECRET="test-secret-for-ci-only-not-production"' >> .env
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm test
+        env:
+          DATABASE_URL: "file:./test.db"
+          AUTH_SECRET: "test-secret-for-ci-only-not-production"
+
+  test-python:
+    name: Python AI Service Tests
+    runs-on: ubuntu-latest
+    needs: lint-python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          cd ai-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+      - name: Run tests
+        run: |
+          cd ai-service
+          pytest tests/ -v --tb=short
+        env:
+          GEMINI_API_KEY: ""  # Tests must not require real API keys
+
+  test-blockchain:
+    name: Hardhat Smart Contract Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Compile contracts
+        run: npx hardhat compile
+      - name: Run contract tests
+        run: npx hardhat test
+
+  # ── Build ──────────────────────────────────────────────────────────────────
+  build-frontend:
+    name: Build Next.js
+    runs-on: ubuntu-latest
+    needs: [test-frontend, test-blockchain]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: "file:./dev.db"
+          AUTH_SECRET: "build-placeholder-not-real"
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+          BLOCKCHAIN_MODE: "mock"
+          AI_SERVICE_URL: "http://localhost:8000"
+
+  build-python:
+    name: Build Python AI Service
+    runs-on: ubuntu-latest
+    needs: test-python
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t agribridge-ai-service:${{ github.sha }} ./ai-service
+
+  # ── Docker Build (only on main) ────────────────────────────────────────────
+  docker-build:
+    name: Build Full Docker Stack
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-python]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Next.js Docker image
+        run: |
+          docker build -t agribridge-nextjs:${{ github.sha }} \
+            --build-arg DATABASE_URL="file:./dev.db" \
+            --build-arg AUTH_SECRET="docker-build-placeholder" \
+            --build-arg BLOCKCHAIN_MODE="mock" \
+            --build-arg AI_SERVICE_URL="http://ai-service:8000" \
+            .
+      - name: Summary
+        run: echo "✅ All tests passed. Docker images built successfully."

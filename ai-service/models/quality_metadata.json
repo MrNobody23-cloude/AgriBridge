@@ -1,0 +1,25 @@
+{
+  "model_name": "quality",
+  "model_type": "xgboost",
+  "version": "1.0.0",
+  "training_date": "2026-09-23T14:48:15.617350",
+  "dataset_version": "synthetic_v1",
+  "dataset_type": "SYNTHETIC \u2014 for prototype/academic use only",
+  "features": [
+    "temperature",
+    "humidity",
+    "days_since_harvest",
+    "cold_chain_deviations",
+    "num_certificates",
+    "has_organic_cert",
+    "crop_type"
+  ],
+  "num_features": 7,
+  "metrics": {
+    "accuracy": 0.7967,
+    "precision_macro": 0.8208,
+    "recall_macro": 0.7885,
+    "f1_macro": 0.8021
+  },
+  "notes": "Model trained on synthetically generated agricultural supply chain data. Suitable for prototype and academic demonstration. For production deployment, replace with validated real-world datasets."
+}

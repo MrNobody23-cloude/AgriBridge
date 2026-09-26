@@ -1,0 +1,27 @@
+{
+  "model_name": "spoilage",
+  "model_type": "xgboost",
+  "version": "1.0.0",
+  "training_date": "2026-09-23T14:48:14.665011",
+  "dataset_version": "synthetic_v1",
+  "dataset_type": "SYNTHETIC \u2014 for prototype/academic use only",
+  "features": [
+    "temperature",
+    "humidity",
+    "transit_days",
+    "days_since_harvest",
+    "crop_type",
+    "distance_km",
+    "cold_chain_deviations",
+    "base_shelf_days",
+    "opt_temp_max"
+  ],
+  "num_features": 9,
+  "metrics": {
+    "accuracy": 0.959,
+    "precision_macro": 0.9318,
+    "recall_macro": 0.9263,
+    "f1_macro": 0.9277
+  },
+  "notes": "Model trained on synthetically generated agricultural supply chain data. Suitable for prototype and academic demonstration. For production deployment, replace with validated real-world datasets."
+}

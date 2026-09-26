@@ -23,7 +23,7 @@ export default function LandingPage() {
           <a href="#tech" className="hover:text-[#16a34a] transition-colors">Technology</a>
         </nav>
         <Link
-          href="/farmer"
+          href="/login"
           className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-green-200"
         >
           Enter Platform →
@@ -47,7 +47,7 @@ export default function LandingPage() {
           </p>
           <div className="flex flex-wrap gap-4 pt-2">
             <Link
-              href="/farmer"
+              href="/login"
               className="px-6 py-3.5 bg-[#16a34a] hover:bg-green-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-green-200 text-sm flex items-center gap-2"
             >
               Enter Platform →
@@ -141,37 +141,37 @@ export default function LandingPage() {
               emoji: '🌾',
               role: 'Farmer',
               desc: 'Register batches, track earnings, get AI quality advice',
-              href: '/farmer',
+              href: '/login',
             },
             {
               emoji: '📦',
               role: 'Exporter',
               desc: 'Verify compliance, detect fraud, manage shipments',
-              href: '/exporter',
+              href: '/login',
             },
             {
               emoji: '🚢',
               role: 'Importer',
               desc: 'Validate certificates, verify authenticity',
-              href: '/exporter',
+              href: '/login',
             },
             {
               emoji: '🏪',
               role: 'Retailer',
               desc: 'Prioritize batches, reduce food waste',
-              href: '/consumer',
+              href: '/login',
             },
             {
               emoji: '👤',
               role: 'Consumer',
               desc: "Scan QR, verify your food's journey",
-              href: '/consumer',
+              href: '/login',
             },
             {
               emoji: '🏛️',
               role: 'Regulator',
               desc: 'Monitor fraud alerts, audit supply chains',
-              href: '/regulator',
+              href: '/login',
             },
           ].map((card, i) => (
             <Link

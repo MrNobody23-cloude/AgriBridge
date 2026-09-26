@@ -3,12 +3,24 @@
 :root {
   --background: #fafaf7;
   --foreground: #1a1a1a;
+  --agro-green: #2F5A28;
+  --tech-blue: #1A365D;
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-blur: 14px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-agro-green: var(--agro-green);
+  --color-tech-blue: var(--tech-blue);
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Base ─────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -19,56 +31,115 @@ body {
   line-height: 1.6;
 }
 
-/* Scrollbar styling */
+/* ─── Scrollbar ─────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f3ee;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(148, 163, 184, 0.55);
 }
 
-/* Pulsing Green Dot Animation */
+/* ─── Glass Design System ───────────────────────── */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow:
+    0 4px 16px -4px rgba(0, 0, 0, 0.06),
+    0 1px 4px -1px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.50);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.50);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-radius: 14px;
+}
+
+/* ─── Brand Color Utilities ─────────────────────── */
+.text-agro-green {
+  color: #2F5A28;
+}
+
+.bg-agro-green {
+  background-color: #2F5A28;
+}
+
+.border-agro-green {
+  border-color: #2F5A28;
+}
+
+.text-tech-blue {
+  color: #1A365D;
+}
+
+.bg-tech-blue {
+  background-color: #1A365D;
+}
+
+.ring-agro-green {
+  --tw-ring-color: #2F5A28;
+}
+
+/* ─── Pulsing Dot ───────────────────────────────── */
 @keyframes pulse-green {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+    box-shadow: 0 0 0 0 rgba(47, 90, 40, 0.7);
   }
+
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(22, 163, 74, 0);
+    box-shadow: 0 0 0 6px rgba(47, 90, 40, 0);
   }
+
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+    box-shadow: 0 0 0 0 rgba(47, 90, 40, 0);
   }
 }
 
 .pulsing-dot {
   width: 8px;
   height: 8px;
-  background-color: #16a34a;
+  background-color: #2F5A28;
   border-radius: 50%;
   display: inline-block;
   animation: pulse-green 2s infinite;
 }
 
-/* Slide-in animation for Activity Feed items */
+/* ─── Feed Slide-in ─────────────────────────────── */
 @keyframes feedSlideIn {
   from {
     opacity: 0;
-    transform: translateY(-12px);
+    transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -76,16 +147,70 @@ body {
 }
 
 .animate-feed-slide-in {
-  animation: feedSlideIn 0.4s ease-out forwards;
+  animation: feedSlideIn 0.35s ease-out forwards;
 }
 
-/* Camera scan line */
+/* ─── Scale-up (modals) ─────────────────────────── */
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.2s ease-out forwards;
+}
+
+/* ─── IoT Scan Line ─────────────────────────────── */
 @keyframes scanLine {
-  0% { top: 5%; }
-  50% { top: 90%; }
-  100% { top: 5%; }
+  0% {
+    top: 5%;
+  }
+
+  50% {
+    top: 90%;
+  }
+
+  100% {
+    top: 5%;
+  }
 }
 
 .animate-scan-line {
   animation: scanLine 2.2s ease-in-out infinite;
+}
+
+/* ─── Input Focus Shared Style ───────────────────── */
+.input-glass {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(209, 213, 219, 0.8);
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #1a1a1a;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.input-glass:focus {
+  outline: none;
+  border-color: #2F5A28;
+  box-shadow: 0 0 0 3px rgba(47, 90, 40, 0.15);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.input-glass::placeholder {
+  color: #9ca3af;
+}
+
+/* ─── Sidebar nav scrollbar ─────────────────────── */
+.sidebar-nav::-webkit-scrollbar {
+  width: 3px;
 }

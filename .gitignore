@@ -1,6 +1,8 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================
+# AgriBridge AI — .gitignore
+# ============================================
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
 .pnp.*
@@ -10,34 +12,117 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
+# Testing
 /coverage
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# Production build
 /build
 
-# misc
+# Misc
 .DS_Store
 *.pem
 
-# debug
+# ⚠️ NEVER commit these files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Database files — NEVER commit
+prisma/dev.db
+prisma/dev.db-journal
+prisma/test.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python
+ai-service/__pycache__/
+ai-service/*.pyc
+ai-service/.venv/
+ai-service/venv/
+ai-service/*.egg-info/
+ai-service/dist/
+ai-service/build/
+ai-service/.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+
+# ML model artifacts
+#
+# The *legacy* XGBoost/IsolationForest models are large, reproducible from
+# ml/trainer.py, and not committed.
+ai-service/models/*.pkl
+ai-service/models/*.joblib
+ai-service/models/*.h5
+ai-service/models/*.pt
+ai-service/models/*.onnx
+!ai-service/models/README.md
+!ai-service/models/*.json
+
+# The six trained agents under models/agents/ ARE committed. They are the
+# deliverable — a real artifact is the only difference between a working agent
+# and one that reports "not configured" — and they are integrity-protected by
+# the SHA-256 digests the loader checks before deserialising them. Track
+# DIGESTS.json with them: without it the loader refuses every artifact.
+!ai-service/models/agents/
+!ai-service/models/agents/*.pkl
+!ai-service/models/agents/DIGESTS.json
+
+# Agent training datasets and evaluation output — the evidence behind the
+# models, kept so a reviewer can re-run the training scripts.
+!ai-service/results/
+!ai-service/results/data/
+!ai-service/results/data/*.csv
+
+# Stray output from ad-hoc seed/pnpm runs
+seed.out
+
+# Vector store (auto-generated)
+ai-service/vectorstore/
+rag/vectorstore/
+
+# IPFS upload temp dir
+uploads/
+tmp/
+
+# Blockchain
+blockchain/artifacts/
+blockchain/cache/
+hardhat/artifacts/
+hardhat/cache/
+
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
 
-.*
+# Vercel
+.vercel
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db

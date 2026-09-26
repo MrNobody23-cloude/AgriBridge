@@ -1,0 +1,90 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: agribridge_postgres
+    environment:
+      POSTGRES_DB: agribridge_ai
+      POSTGRES_USER: agribridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agribridge_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agribridge -d agribridge_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agribridge_net
+
+  # ── Python AI Service ────────────────────────────────────────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: agribridge_ai_service
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - PINATA_JWT=${PINATA_JWT}
+      - PINATA_API_KEY=${PINATA_API_KEY}
+      - PINATA_API_SECRET=${PINATA_API_SECRET}
+      - PINATA_GATEWAY_URL=${PINATA_GATEWAY_URL:-https://gateway.pinata.cloud}
+      - CORS_ORIGINS=http://localhost:3000
+      - AI_SERVICE_HOST=0.0.0.0
+      - AI_SERVICE_PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_models:/app/models
+      - ai_vectorstore:/app/vectorstore
+      - ai_ragdocs:/app/rag_documents
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+    networks:
+      - agribridge_net
+
+  # ── Next.js Application ──────────────────────────────────────────────────────
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agribridge_nextjs
+    environment:
+      - DATABASE_URL=postgresql://agribridge:${POSTGRES_PASSWORD:-agribridge_dev_password}@postgres:5432/agribridge_ai
+      - AUTH_SECRET=${AUTH_SECRET}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - AI_SERVICE_URL=http://ai-service:8000
+      - BLOCKCHAIN_MODE=${BLOCKCHAIN_MODE:-mock}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-https://rpc-amoy.polygon.technology}
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - CONTRACT_ADDRESS=${CONTRACT_ADDRESS}
+      - PINATA_JWT=${PINATA_JWT}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      - agribridge_net
+
+volumes:
+  postgres_data:
+  ai_models:
+  ai_vectorstore:
+  ai_ragdocs:
+
+networks:
+  agribridge_net:
+    driver: bridge

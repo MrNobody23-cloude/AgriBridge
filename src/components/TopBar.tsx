@@ -1,85 +1,108 @@
 'use client';
-
 import React, { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
 
 const pageTitles: Record<string, string> = {
-  '/farmer': 'Farmer Dashboard',
-  '/exporter': 'Exporter Dashboard',
+  '/farmer': 'Farmer Overview',
+  '/exporter': 'Export Console',
+  '/transporter': 'Logistics & IoT',
+  '/importer': 'Import Receipt',
+  '/retailer': 'Retail Information',
   '/consumer': 'Consumer Verification',
-  '/regulator': 'Regulator Panel',
-  '/agents': 'AI Agent Command Center',
-  '/trust-score': 'Trust Score Breakdown',
+  '/regulator': 'Compliance & Audit',
+  '/admin': 'System Administrator',
+  '/agents': 'AI Insights',
+  '/trust-score': 'Trust Analysis',
 };
 
-export default function TopBar({ title: propTitle, role: propRole }: { title?: string; role?: string }) {
+export default function TopBar({ title: propTitle, user }: { title?: string; user?: any }) {
   const pathname = usePathname();
+  const router = useRouter();
   const title = propTitle || pageTitles[pathname] || 'Dashboard';
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login';
+    } catch {
+      window.location.href = '/login';
+    }
+  };
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between sticky top-0 z-30 ml-[240px]">
+    <header className="h-16 glass-header px-6 flex items-center justify-between sticky top-0 z-30 transition-all rounded-b-2xl mx-6 mt-2">
       {/* Breadcrumb & Title */}
-      <div className="flex items-center gap-2 text-xs text-gray-500">
-        <span className="font-medium">AgriBridge AI</span>
-        <span>/</span>
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <span className="font-medium hidden sm:inline">AgriBridge AI</span>
+        <span className="hidden sm:inline">/</span>
         <span className="font-bold text-[#1a1a1a] text-sm">{title}</span>
       </div>
 
       {/* Right Controls */}
       <div className="flex items-center gap-4">
         {/* Search Bar */}
-        <div className="relative">
+        <div className="relative hidden md:block">
           <input
             type="text"
-            placeholder="Search batch, crop, or certificate..."
-            className="w-64 pl-9 pr-4 py-1.5 text-xs bg-[#FAFAF7] border border-gray-200 rounded-lg text-[#1a1a1a] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#16a34a]"
+            placeholder="Search trace, batch..."
+            className="w-56 pl-9 pr-4 py-1.5 text-xs bg-white/40 border border-white/60 rounded-full text-[#1a1a1a] placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-agro-green/50 backdrop-blur-md"
           />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
         </div>
 
-        {/* Notifications Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors text-base"
-          >
-            🔔
-            <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-              3
-            </span>
+        {/* AI Tracker & Notifications */}
+        <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1 bg-white/50 border border-green-200/50 rounded-full text-[10px] font-bold text-agro-green shadow-xs">
+            <span className="pulsing-dot"></span> AI Operational
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-full hover:bg-white/40 transition-colors"
+            >
+              <Bell className="w-4 h-4 text-gray-700" />
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            </button>
+            {showNotifications && (
+              <div className="absolute right-0 mt-3 w-80 glass-card p-3 space-y-2 z-50 animate-feed-slide-in">
+                <div className="flex items-center justify-between border-b border-gray-200/50 pb-2">
+                  <span className="text-xs font-bold text-[#1a1a1a]">Updates</span>
+                </div>
+                <div className="text-xs text-gray-500 py-2 text-center">No new notifications.</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* User Dropdown */}
+        <div className="relative border-l border-white/30 pl-3">
+          <button onClick={() => setShowUserDropdown(!showUserDropdown)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-full bg-gray-100 border border-white text-gray-700 flex items-center justify-center shadow-xs overflow-hidden">
+              <User className="w-4 h-4" />
+            </div>
+            <div className="hidden md:flex flex-col text-left">
+              <span className="text-xs font-bold text-[#1a1a1a] leading-none mb-1">{user?.name || 'User'}</span>
+              <span className="text-[10px] uppercase font-bold text-agro-green leading-none">{user?.role || 'Guest'}</span>
+            </div>
           </button>
 
-          {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 p-3 space-y-2 z-50 animate-feed-slide-in">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                <span className="text-xs font-bold text-[#1a1a1a]">Notifications</span>
-                <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">3 New</span>
+          {showUserDropdown && (
+            <div className="absolute right-0 mt-3 w-48 glass-card py-2 z-50 animate-feed-slide-in shadow-xl">
+              <div className="px-4 py-2 border-b border-gray-200/50 mb-1">
+                <p className="text-xs font-bold text-[#1a1a1a] truncate">{user?.email}</p>
               </div>
-              <div className="space-y-2 text-xs">
-                <div className="p-2 bg-green-50 rounded-lg border border-green-100">
-                  <p className="font-bold text-green-800">✓ Batch AG-2847 Registered</p>
-                  <p className="text-gray-600 text-[11px] mt-0.5">Recorded on Polygon testnet — TX: 0x7f3a...</p>
-                </div>
-                <div className="p-2 bg-amber-50 rounded-lg border border-amber-100">
-                  <p className="font-bold text-amber-800">⚠️ Cold Chain Temp Alert</p>
-                  <p className="text-gray-600 text-[11px] mt-0.5">Batch AG-2841 temperature reached 5.2°C</p>
-                </div>
-                <div className="p-2 bg-red-50 rounded-lg border border-red-100">
-                  <p className="font-bold text-red-800">🚨 Duplicate Certificate</p>
-                  <p className="text-gray-600 text-[11px] mt-0.5">Shipment EX-1923 flagged by Fraud Agent</p>
-                </div>
-              </div>
+              <button className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-white/40 flex items-center gap-2 font-medium">
+                <Settings className="w-3.5 h-3.5" /> Settings
+              </button>
+              <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium">
+                <LogOut className="w-3.5 h-3.5" /> Logout
+              </button>
             </div>
           )}
-        </div>
-
-        {/* User Avatar */}
-        <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
-          <div className="w-8 h-8 rounded-full bg-[#16a34a] text-white font-bold text-xs flex items-center justify-center">
-            RK
-          </div>
-          <span className="text-xs font-semibold text-[#1a1a1a] hidden md:inline">Rajesh Kumar</span>
         </div>
       </div>
     </header>

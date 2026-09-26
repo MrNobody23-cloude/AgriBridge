@@ -1,5 +1,10 @@
+// ============================================================
+// AgriBridge AI — Prisma Schema
+// Database: PostgreSQL (production) / SQLite (dev fallback)
+// ============================================================
+
 datasource db {
-  provider = "sqlite"
+    provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -7,20 +12,31 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ============================================================
+// USERS & AUTHENTICATION
+// ============================================================
+
 model User {
-  id            String             @id @default(uuid())
-  name          String
-  email         String             @unique
-  password      String
-  role          String             @default("FARMER") // FARMER, EXPORTER, CONSUMER, REGULATOR, ADMIN
-  phone         String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  /// FARMER | EXPORTER | TRANSPORTER | IMPORTER | RETAILER | CONSUMER | REGULATOR | ADMIN
+  role      String   @default("FARMER")
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   farmerProfile FarmerProfile?
-  batches       Batch[]            @relation("FarmerBatches")
-  shipments     Shipment[]         @relation("ExporterShipments")
+  batches       Batch[]             @relation("FarmerBatches")
+  shipments     Shipment[]          @relation("ExporterShipments")
   events        SupplyChainEvent[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@index([email])
+  @@index([role])
 }
 
 model FarmerProfile {
@@ -35,83 +51,162 @@ model FarmerProfile {
   updatedAt DateTime @updatedAt
 }
 
+// ============================================================
+// PRODUCTS & BATCHES
+// ============================================================
+
 model Product {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   category    String
   description String
   batches     Batch[]
 }
 
 model Batch {
-  id                       String             @id @default(uuid())
-  batchCode                String             @unique
-  farmerId                 String
-  farmer                   User               @relation("FarmerBatches", fields: [farmerId], references: [id])
-  productId                String
-  product                  Product            @relation(fields: [productId], references: [id])
-  quantity                 Float
-  harvestDate              DateTime
-  location                 String
-  status                   String             @default("Registered")
-  blockchainHash           String
+  id                        String   @id @default(uuid())
+  /// Format: AGR-YYYY-ST-NNNNNN  e.g. AGR-2026-MH-000001
+  batchCode                 String   @unique
+  farmerId                  String
+  farmer                    User     @relation("FarmerBatches", fields: [farmerId], references: [id])
+  productId                 String
+  product                   Product  @relation(fields: [productId], references: [id])
+  variety                   String?
+  quantity                  Float
+  unit                      String   @default("kg")
+  harvestDate               DateTime
+  location                  String
+  destinationCountry        String?
+  /// Registered | In Transit | Exported | Delivered | Flagged | Recalled
+  status                    String   @default("Registered")
+  blockchainHash            String
   blockchainTransactionHash String?
-  trustScore               Int                @default(85)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  blockchainMode            String   @default("mock")
+  trustScore                Int      @default(0)
+  // ML predictions cached
+  spoilageProbability       Float?
+  spoilageRisk              String?
+  remainingShelfLifeDays    Int?
+  qualityScore              Float?
+  qualityGrade              String?
+  // IPFS
+  ipfsDocumentCids          String[] @default([])
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
-  events                   SupplyChainEvent[]
-  certificates             Certificate[]
-  shipments                Shipment[]
-  fraudAlerts              FraudAlert[]
-  trustScoreDetails        TrustScore?
-  temperatureLogs          TemperatureLog[]
+  events            SupplyChainEvent[]
+  certificates      Certificate[]
+  shipments         Shipment[]
+  fraudAlerts       FraudAlert[]
+  trustScoreDetails TrustScore?
+  temperatureLogs   TemperatureLog[]
+  mlPredictions     MlPrediction[]
+  ipfsDocuments     IpfsDocument[]
+  notifications     Notification[]
+
+  @@index([batchCode])
+  @@index([farmerId])
+  @@index([status])
+  @@index([createdAt])
 }
+
+// ============================================================
+// SUPPLY CHAIN EVENTS (TRACEABILITY)
+// ============================================================
 
 model SupplyChainEvent {
-  id                       String   @id @default(uuid())
-  batchId                  String
-  batch                    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  eventType                String
-  actorId                  String?
-  actor                    User?    @relation(fields: [actorId], references: [id])
-  location                 String
-  timestamp                DateTime @default(now())
-  metadata                 String?
+  id                        String   @id @default(uuid())
+  batchId                   String
+  batch                     Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// FARM_REGISTERED | HARVESTED | INSPECTED | CERTIFIED | TRANSFERRED_TO_MANDI |
+  /// TRANSFERRED_TO_EXPORTER | LOADED_FOR_EXPORT | EXPORTED | IN_TRANSIT |
+  /// CUSTOMS_CLEARED | IMPORTER_RECEIVED | RETAILER_RECEIVED | CONSUMER_VERIFIED
+  eventType                 String
+  actorId                   String?
+  actor                     User?    @relation(fields: [actorId], references: [id])
+  actorRole                 String?
+  location                  String
+  timestamp                 DateTime @default(now())
+  metadata                  String?
   blockchainTransactionHash String?
+
+  @@index([batchId])
+  @@index([eventType])
+  @@index([timestamp])
 }
+
+// ============================================================
+// CERTIFICATES & IPFS DOCUMENTS
+// ============================================================
 
 model Certificate {
   id                 String   @id @default(uuid())
   batchId            String
   batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// APEDA_PHYTOSANITARY | GLOBALG.A.P | GI_TAG | ORGANIC | FSSAI | CUSTOM
   certificateType    String
-  fileUrl            String
+  fileUrl            String   @default("")
+  ipfsHash           String?
   fileHash           String
   issuer             String
   issueDate          DateTime @default(now())
   expiryDate         DateTime
-  verificationStatus String   @default("VERIFIED")
+  /// PENDING | VERIFIED | MISMATCH | NOT_FOUND | DUPLICATE | SUSPICIOUS
+  verificationStatus String   @default("PENDING")
+  blockchainHash     String?
   createdAt          DateTime @default(now())
+
+  @@index([batchId])
+  @@index([fileHash])
+  @@index([verificationStatus])
 }
 
+model IpfsDocument {
+  id          String   @id @default(uuid())
+  batchId     String?
+  batch       Batch?   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  ipfsCid     String   @unique
+  fileHash    String
+  filename    String
+  mimeType    String
+  sizBytes    Int?
+  uploadedBy  String?
+  uploadedAt  DateTime @default(now())
+  docType     String   @default("CERTIFICATE")
+
+  @@index([batchId])
+  @@index([ipfsCid])
+}
+
+// ============================================================
+// SHIPMENTS & COMPLIANCE
+// ============================================================
+
 model Shipment {
-  id                 String            @id @default(uuid())
-  shipmentCode       String            @unique
+  id                 String   @id @default(uuid())
+  shipmentCode       String   @unique
   batchId            String
-  batch              Batch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   exporterId         String
-  exporter           User              @relation("ExporterShipments", fields: [exporterId], references: [id])
+  exporter           User     @relation("ExporterShipments", fields: [exporterId], references: [id])
+  transporterId      String?
   destinationCountry String
   quantity           Float
-  status             String            @default("Pending")
-  riskScore          Int               @default(15)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  unit               String   @default("kg")
+  /// Pending | In Transit | Under Review | Customs | Delivered | Flagged | Rejected
+  status             String   @default("Pending")
+  riskScore          Int      @default(50)
+  estimatedArrival   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  complianceChecks   ComplianceCheck[]
-  fraudAlerts        FraudAlert[]
-  temperatureLogs    TemperatureLog[]
+  complianceChecks ComplianceCheck[]
+  fraudAlerts      FraudAlert[]
+  temperatureLogs  TemperatureLog[]
+
+  @@index([batchId])
+  @@index([exporterId])
+  @@index([status])
 }
 
 model ComplianceCheck {
@@ -120,11 +215,21 @@ model ComplianceCheck {
   shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   country     String
   requirement String
-  status      String   @default("PASSED")
+  /// PASSED | FAILED | MISSING | PENDING
+  status      String   @default("PENDING")
   explanation String
   source      String
+  evidence    String?
   createdAt   DateTime @default(now())
+
+  @@index([shipmentId])
+  @@index([country])
+  @@index([status])
 }
+
+// ============================================================
+// FRAUD DETECTION
+// ============================================================
 
 model FraudAlert {
   id          String    @id @default(uuid())
@@ -132,31 +237,81 @@ model FraudAlert {
   batch       Batch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
   shipmentId  String?
   shipment    Shipment? @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  /// DUPLICATE_CERTIFICATE | EXPIRED_CERTIFICATE | TEMP_BREACH | IMPOSSIBLE_TIMESTAMP |
+  /// IMPOSSIBLE_OWNERSHIP | QUANTITY_ANOMALY | ROUTE_ANOMALY | WEIGHT_DISCREPANCY
   fraudType   String
+  /// CRITICAL | HIGH | MEDIUM | LOW
   severity    String    @default("HIGH")
   description String
+  evidence    String?
   confidence  Float     @default(0.95)
+  /// OPEN | UNDER_REVIEW | RESOLVED | FALSE_POSITIVE
   status      String    @default("OPEN")
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  @@index([batchId])
+  @@index([shipmentId])
+  @@index([status])
+  @@index([severity])
 }
 
+// ============================================================
+// TRUST SCORE
+// ============================================================
+
 model TrustScore {
-  id                 String   @id @default(uuid())
-  batchId            String   @unique
-  batch              Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  blockchainScore    Int      @default(20)
-  certificateScore   Int      @default(20)
-  coldChainScore     Int      @default(20)
-  inspectionScore    Int      @default(20)
-  complianceScore    Int      @default(10)
-  qualityScore       Int      @default(10)
-  finalScore         Int      @default(90)
-  factorsJson        String
-  explanation        String
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(uuid())
+  batchId          String   @unique
+  batch            Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  blockchainScore  Int      @default(0)
+  certificateScore Int      @default(0)
+  coldChainScore   Int      @default(0)
+  inspectionScore  Int      @default(0)
+  complianceScore  Int      @default(0)
+  qualityScore     Int      @default(0)
+  mlRiskScore      Int      @default(0)
+  finalScore       Int      @default(0)
+  factorsJson      String
+  explanation      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([batchId])
+  @@index([finalScore])
 }
+
+// ============================================================
+// ML PREDICTIONS
+// ============================================================
+
+model MlPrediction {
+  id           String   @id @default(uuid())
+  batchId      String
+  batch        Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  /// SPOILAGE | QUALITY | SHELF_LIFE | FRAUD | DEMAND
+  modelType    String
+  modelName    String
+  modelVersion String   @default("1.0.0")
+  /// Raw JSON prediction output
+  result       String
+  confidence   Float
+  featuresJson String?
+  shapJson     String?
+  inputJson    String?
+  createdAt    DateTime @default(now())
+
+  @@index([batchId])
+  @@index([modelType])
+  @@index([createdAt])
+}
+
+// ============================================================
+// IOT / SENSOR READINGS
+// ============================================================
 
 model TemperatureLog {
   id          String    @id @default(uuid())
@@ -164,18 +319,88 @@ model TemperatureLog {
   shipment    Shipment? @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   batchId     String?
   batch       Batch?    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sensorId    String?
   temperature Float
+  humidity    Float?
   location    String
+  latitude    Float?
+  longitude   Float?
+  batteryLevel Float?
+  isSimulated Boolean   @default(false)
   timestamp   DateTime  @default(now())
+
+  @@index([batchId])
+  @@index([shipmentId])
+  @@index([sensorId])
+  @@index([timestamp])
 }
 
+// ============================================================
+// AI AGENT LOGS
+// ============================================================
+
 model AiAgentLog {
-  id          String   @id @default(uuid())
-  agentName   String
-  task        String
-  input       String
-  output      String
-  confidence  Float    @default(0.95)
-  status      String   @default("COMPLETED")
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  agentName  String
+  agentType  String   @default("unknown")
+  task       String
+  input      String
+  output     String
+  toolsUsed  String?
+  evidence   String?
+  sources    String?
+  confidence Float    @default(0.0)
+  /// COMPLETED | PASSED | FLAGGED | FAILED | ANSWERED
+  status     String   @default("COMPLETED")
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  @@index([agentName])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batchId   String?
+  batch     Batch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  /// TEMP_BREACH | SPOILAGE_RISK | FRAUD_ALERT | COMPLIANCE_FAIL | CERT_EXPIRED |
+  /// BATCH_CREATED | SHIPMENT_UPDATE | SYSTEM
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ============================================================
+// AUDIT LOG (immutable)
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
+  resourceId String?
+  metadata   String?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([timestamp])
 }

@@ -1,0 +1,25 @@
+{
+  "model_name": "fraud",
+  "model_type": "isolation_forest",
+  "version": "1.0.0",
+  "training_date": "2026-09-23T14:48:16.818395",
+  "dataset_version": "synthetic_v1",
+  "dataset_type": "SYNTHETIC \u2014 for prototype/academic use only",
+  "features": [
+    "quantity_ratio",
+    "cert_age_days",
+    "ownership_transfers",
+    "time_farm_to_export_days",
+    "temp_breach_count",
+    "duplicate_cert_score",
+    "route_deviation_km"
+  ],
+  "num_features": 7,
+  "metrics": {
+    "accuracy": 0.0167,
+    "precision_macro": 0.0098,
+    "recall_macro": 0.05,
+    "f1_macro": 0.0164
+  },
+  "notes": "Model trained on synthetically generated agricultural supply chain data. Suitable for prototype and academic demonstration. For production deployment, replace with validated real-world datasets."
+}

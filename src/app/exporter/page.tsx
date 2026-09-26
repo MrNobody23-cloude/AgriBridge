@@ -128,7 +128,7 @@ export default function ExporterDashboard() {
   };
 
   return (
-    <DashboardLayout title="Exporter Dashboard" role="Exporter">
+    <DashboardLayout title="Exporter Dashboard">
       {/* Top Banner Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">

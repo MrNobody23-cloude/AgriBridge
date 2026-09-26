@@ -6,7 +6,7 @@ import TrustScoreGauge from '@/components/TrustScoreGauge';
 import Link from 'next/link';
 
 export default function ConsumerPage() {
-  const [searchCode, setSearchCode] = useState('AG-2835');
+  const [searchCode, setSearchCode] = useState('AGR-2026-UK-284701');
   const [batchData, setBatchData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -56,7 +56,7 @@ export default function ConsumerPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchId: searchCode || 'AG-2835',
+          batchId: searchCode || 'AGR-2026-UK-284701',
           query: q,
         }),
       });
@@ -75,7 +75,7 @@ export default function ConsumerPage() {
   };
 
   return (
-    <DashboardLayout title="Consumer Verification" role="Consumer">
+    <DashboardLayout title="Consumer Verification">
       {/* Top Banner Search */}
       <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-xs space-y-4">
         <div className="max-w-xl mx-auto text-center space-y-2">
@@ -102,7 +102,7 @@ export default function ConsumerPage() {
           </div>
 
           <div className="flex justify-center gap-2 pt-2">
-            {['AG-2835', 'AG-2847', 'AG-2841', 'AG-2829'].map((demoCode) => (
+            {['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503'].map((demoCode) => (
               <button
                 key={demoCode}
                 onClick={() => {
@@ -181,8 +181,8 @@ export default function ConsumerPage() {
                 >
                   <div
                     className={`max-w-md p-3 rounded-2xl text-xs font-medium ${msg.sender === 'user'
-                        ? 'bg-[#16a34a] text-white rounded-br-none'
-                        : 'bg-white border border-gray-200 text-[#1a1a1a] rounded-bl-none shadow-xs'
+                      ? 'bg-[#16a34a] text-white rounded-br-none'
+                      : 'bg-white border border-gray-200 text-[#1a1a1a] rounded-bl-none shadow-xs'
                       }`}
                   >
                     {msg.text}

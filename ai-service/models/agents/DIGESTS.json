@@ -1,0 +1,35 @@
+{
+  "models": {
+    "traceability": {
+      "sha256": "d53b450a7bfdb5eb04c80dcaf56a6e7d7adc355df3b673ace888a88f89977411",
+      "bytes": 983054,
+      "sklearn_version": "1.7.1"
+    },
+    "quality": {
+      "sha256": "cc59f1b380a2d1b0492a45c8901befd81b9ca93b4d2325b7ec3e5946cf98f4c0",
+      "bytes": 5752646,
+      "sklearn_version": "1.7.1"
+    },
+    "spoilage": {
+      "sha256": "fe3a0a885e9a26efe94dd08fecd4cd2c1c8ab70db2438fb1e5c2e3b879c00440",
+      "bytes": 2284488,
+      "sklearn_version": "1.7.1"
+    },
+    "fraud": {
+      "sha256": "4d670c327503dddefe7cbb9106a4649fa149d893116b59133385438f70cbc0d6",
+      "bytes": 581558,
+      "sklearn_version": "1.7.1"
+    },
+    "compliance": {
+      "sha256": "4d5fa48434e3e5963bc6af723e51bb9a221966031cdd7d89a6a55a141ae8acd1",
+      "bytes": 1475926,
+      "sklearn_version": "1.7.1"
+    },
+    "trust": {
+      "sha256": "55672413298df3d796f16696f6c32619ed55fec9e778bf67d2bcfb490e18afda",
+      "bytes": 1446,
+      "sklearn_version": "1.7.1"
+    }
+  },
+  "note": "sklearn_version is the scikit-learn these artifacts were fitted under. The loader warns when it differs from the running version, because a pickle stores the class layout of the version that fitted it."
+}

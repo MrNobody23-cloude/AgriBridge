@@ -1,8 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 
 export async function GET(req: NextRequest) {
+    const authResult = await requirePermission(req, 'ai:use');
+    if (authResult instanceof Response) return authResult;
+
     try {
         const logs = await prisma.aiAgentLog.findMany({
             take: 20,

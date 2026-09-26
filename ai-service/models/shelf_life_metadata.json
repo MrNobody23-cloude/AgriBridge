@@ -1,0 +1,24 @@
+{
+  "model_name": "shelf_life",
+  "model_type": "xgboost",
+  "version": "1.0.0",
+  "training_date": "2026-09-23T14:48:16.270684",
+  "dataset_version": "synthetic_v1",
+  "dataset_type": "SYNTHETIC \u2014 for prototype/academic use only",
+  "features": [
+    "temperature",
+    "humidity",
+    "transit_days",
+    "days_since_harvest",
+    "crop_type",
+    "cold_chain_deviations",
+    "base_shelf_days"
+  ],
+  "num_features": 7,
+  "metrics": {
+    "mae": 1.2246,
+    "rmse": 2.0218,
+    "r2": 0.9995
+  },
+  "notes": "Model trained on synthetically generated agricultural supply chain data. Suitable for prototype and academic demonstration. For production deployment, replace with validated real-world datasets."
+}

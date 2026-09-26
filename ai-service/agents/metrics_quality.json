@@ -1,0 +1,13 @@
+{
+    "mae": 3.918788339949739,
+    "rmse": 6.106685601117233,
+    "r2_score": 0.955796589851657,
+    "test_samples": 300,
+    "top_features": [
+        "temperature",
+        "storage_duration",
+        "crop_type_Onion",
+        "transportation_duration",
+        "crop_type_Potato"
+    ]
+}

@@ -1,82 +1,118 @@
+"""
+AgriBridge AI — Python FastAPI Microservice
+Provides: ML inference, RAG compliance, LangGraph multi-agent, IPFS upload
+"""
 import os
 import time
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ── Environment validation ────────────────────────────────────────────────────
+
+REQUIRED_VARS = []  # Optional vars, not hard-required for basic startup
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("agribridge.ai")
+
+# ── Lifespan: load models at startup ─────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Load models once at startup, not on every request.
+
+    Nothing is trained here. The legacy registry looks for its artifacts on disk
+    and records any that are absent as not configured; the six trained agents
+    are SHA-256 verified and deserialised. A model that is missing or fails its
+    checksum is reported as unavailable at request time — the service never
+    trains one on startup to fill the gap.
+    """
+    logger.info("🚀 AgriBridge AI Service starting up...")
+
+    from ml.model_registry import ModelRegistry
+    registry = ModelRegistry()
+    await registry.load_all()
+    app.state.model_registry = registry
+
+    # Six trained scikit-learn agents. Each artifact is SHA-256 verified before
+    # it is deserialised; one that fails is reported unavailable, not faked.
+    from agents import get_loader
+    get_loader()
+    app.state.agent_loader = get_loader()
+
+    from rag.pipeline import RAGPipeline
+    rag = RAGPipeline()
+    await rag.initialize()
+    app.state.rag_pipeline = rag
+
+    logger.info("✅ Models and RAG pipeline loaded.")
+    yield
+    logger.info("🛑 AgriBridge AI Service shutting down.")
+
+# ── App ────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
     title="AgriBridge AI Microservice",
-    description="Python FastAPI Microservice for RAG Compliance Intelligence and Spoilage Prediction",
-    version="1.0.0"
+    description="""
+    Real AI inference engine for AgriBridge Agricultural Trust Intelligence Platform.
+
+    Provides:
+    - XGBoost spoilage prediction with SHAP explanations
+    - Quality and shelf-life prediction
+    - Isolation Forest anomaly/fraud detection
+    - RAG-based regulatory compliance (Gemini + FAISS)
+    - LangGraph multi-agent orchestration
+    - IPFS document upload via Pinata
+    """,
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
-class ComplianceRequest(BaseModel):
-    country: str
-    crop: Optional[str] = "General Agriculture"
-    batch_id: Optional[str] = None
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-class SpoilageRequest(BaseModel):
-    crop: str
-    temperature: float
-    transit_days: int
+# ── Routers ────────────────────────────────────────────────────────────────────
+
+from routers import ml_router, rag_router, agents_router, agents_v2_router, ipfs_router, health_router
+
+app.include_router(health_router.router, prefix="/api/health", tags=["Health"])
+app.include_router(ml_router.router, prefix="/api/ml", tags=["ML Inference"])
+app.include_router(rag_router.router, prefix="/api/rag", tags=["RAG Compliance"])
+app.include_router(agents_router.router, prefix="/api/agents", tags=["LangGraph Agents"])
+# Additive: the trained agent pack. The routes above keep their exact shapes.
+app.include_router(agents_v2_router.router, prefix="/api/agents/v2", tags=["Trained Agents"])
+app.include_router(ipfs_router.router, prefix="/api/ipfs", tags=["IPFS"])
 
 @app.get("/")
-def read_root():
+def root():
     return {
         "service": "AgriBridge AI Microservice",
+        "version": "2.0.0",
         "status": "online",
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    }
-
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "service": "agribridge-ai-fastapi"}
-
-@app.post("/api/compliance/rag")
-def rag_compliance(req: ComplianceRequest):
-    country = req.country.upper()
-    
-    rules = [
-        {
-            "country": country,
-            "requirement": "APEDA Export Phytosanitary Standard",
-            "status": "PASSED",
-            "explanation": f"Verified against {country} Import Plant Quarantine Act.",
-            "source": f"{country} Ministry of Agriculture"
-        },
-        {
-            "country": country,
-            "requirement": "Maximum Residue Limit (MRL) Screening",
-            "status": "PASSED",
-            "explanation": f"Pesticide residues within {country} statutory limits.",
-            "source": "Codex Alimentarius / EU Regulation 396/2005"
-        }
-    ]
-    
-    return {
-        "success": True,
-        "country": country,
-        "crop": req.crop,
-        "passed": True,
-        "checks": rules,
-        "summary": f"RAG Intelligence Service evaluated {len(rules)} regulatory standards for export to {country}. 100% compliant."
-    }
-
-@app.post("/api/spoilage/predict")
-def predict_spoilage_api(req: SpoilageRequest):
-    temp = req.temperature
-    days = req.transit_days
-    
-    remaining_days = max(1, 14 - days - int(temp * 0.5))
-    risk = "LOW" if remaining_days > 8 else ("MEDIUM" if remaining_days > 4 else "HIGH")
-    
-    return {
-        "crop": req.crop,
-        "spoilageRisk": risk,
-        "remainingDays": remaining_days,
-        "recommendation": f"Maintain cold storage at 10-12°C during transit for {req.crop}."
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "docs": "/docs",
+        "capabilities": ["ml-inference", "rag-compliance", "multi-agent", "ipfs"],
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    host = os.getenv("AI_SERVICE_HOST", "0.0.0.0")
+    port = int(os.getenv("AI_SERVICE_PORT", "8000"))
+    uvicorn.run("main:app", host=host, port=port, reload=True)

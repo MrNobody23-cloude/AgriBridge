@@ -1,9 +1,14 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/auth';
 import { investigateFraudSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
 
 export async function POST(req: NextRequest) {
+    const authResult = await requirePermission(req, 'fraud:investigate');
+    if (authResult instanceof Response) return authResult;
+    const { user } = authResult;
+
     try {
         const body = await req.json();
         const validated = investigateFraudSchema.parse(body);
