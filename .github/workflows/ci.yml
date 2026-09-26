@@ -118,33 +118,30 @@ jobs:
           DATABASE_URL: "file:./dev.db"
           AUTH_SECRET: "build-placeholder-not-real"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
-          BLOCKCHAIN_MODE: "mock"
           AI_SERVICE_URL: "http://localhost:8000"
 
+  # ── Python AI service: run natively, no container ──────────────────────────
+  # The application is required to run natively on Windows/Linux/macOS, so CI
+  # exercises the same path a developer does. This job also fails loudly if a
+  # trained artifact is missing, which the Docker build never checked.
   build-python:
-    name: Build Python AI Service
+    name: Verify Python AI Service
     runs-on: ubuntu-latest
     needs: test-python
     steps:
       - uses: actions/checkout@v4
-      - name: Build Docker image
-        run: docker build -t agribridge-ai-service:${{ github.sha }} ./ai-service
-
-  # ── Docker Build (only on main) ────────────────────────────────────────────
-  docker-build:
-    name: Build Full Docker Stack
-    runs-on: ubuntu-latest
-    needs: [build-frontend, build-python]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build Next.js Docker image
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install
         run: |
-          docker build -t agribridge-nextjs:${{ github.sha }} \
-            --build-arg DATABASE_URL="file:./dev.db" \
-            --build-arg AUTH_SECRET="docker-build-placeholder" \
-            --build-arg BLOCKCHAIN_MODE="mock" \
-            --build-arg AI_SERVICE_URL="http://ai-service:8000" \
-            .
-      - name: Summary
-        run: echo "✅ All tests passed. Docker images built successfully."
+          python -m pip install --upgrade pip
+          pip install -r ai-service/requirements.txt
+      - name: Import the agent modules
+        run: |
+          python - <<'PY'
+          import sys, pathlib
+          sys.path.insert(0, str(pathlib.Path('ai-service').resolve()))
+          import main, routers, rag.pipeline, ml.inference, agents.loader
+          print('ai-service modules import cleanly')
+          PY

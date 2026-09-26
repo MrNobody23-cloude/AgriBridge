@@ -4,18 +4,6 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import BatchTable, { BatchRow } from '@/components/BatchTable';
 import QRCode from 'qrcode';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
-
-const earningsData = [
-  { month: 'Oct', earnings: 142000, baseline: 110000 },
-  { month: 'Nov', earnings: 185000, baseline: 125000 },
-  { month: 'Dec', earnings: 210000, baseline: 140000 },
-  { month: 'Jan', earnings: 195000, baseline: 135000 },
-  { month: 'Feb', earnings: 260000, baseline: 150000 },
-  { month: 'Mar', earnings: 310000, baseline: 165000 },
-];
 
 export default function FarmerDashboard() {
   const [batches, setBatches] = useState<BatchRow[]>([]);
@@ -43,6 +31,8 @@ export default function FarmerDashboard() {
           id: b.batchCode,
           crop: b.product?.name || 'Crop Batch',
           qty: `${b.quantity.toLocaleString()} kg`,
+          quantity: Number(b.quantity),
+          unit: b.unit || 'kg',
           harvestDate: new Date(b.harvestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           trustScore: b.trustScore,
           status: b.status as any,
@@ -249,38 +239,55 @@ export default function FarmerDashboard() {
           </form>
         </div>
 
-        {/* Earnings Chart */}
+        {/* Portfolio Summary
+            This panel previously rendered a six-month revenue chart from a
+            hardcoded `earningsData` array alongside a "+28% Net Margin" badge.
+            There is no revenue, payment or price model anywhere in the schema,
+            so every point on that chart and that percentage were invented. The
+            chart is gone; these figures are counted from the batches this
+            farmer actually has records for. */}
         <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
-                <h2 className="text-base font-bold text-[#1a1a1a]">📈 Revenue Growth (AgriBridge vs Mandi Baseline)</h2>
+                <h2 className="text-base font-bold text-[#1a1a1a]">📦 Your Batch Portfolio</h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Direct export premiums unlocked by verified Trust Scores.
+                  Counted from your recorded batches. Revenue is not tracked — this
+                  platform records no payments or sale prices.
                 </p>
               </div>
-              <span className="text-xs font-bold text-[#16a34a] bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
-                +28% Net Margin
-              </span>
             </div>
 
-            <div className="h-64 mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={earningsData}>
-                  <defs>
-                    <linearGradient id="colorEarnings" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#16a34a" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6b7280' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickFormatter={(v) => `₹${v / 1000}k`} />
-                  <Tooltip formatter={(value: any) => [`₹${value.toLocaleString()}`, 'Amount']} />
-                  <Area type="monotone" dataKey="earnings" stroke="#16a34a" strokeWidth={3} fillOpacity={1} fill="url(#colorEarnings)" name="AgriBridge Premium" />
-                  <Area type="monotone" dataKey="baseline" stroke="#9ca3af" strokeWidth={2} strokeDasharray="5 5" fill="none" name="Standard Mandi MSP" />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Batches</p>
+                <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{batches.length}</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Total Quantity</p>
+                <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  {batches.reduce((s, b) => s + (Number(b.quantity) || 0), 0).toLocaleString()}
+                  <span className="text-sm font-bold text-gray-400 ml-1">{batches[0]?.unit || 'kg'}</span>
+                </p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Avg Trust Score</p>
+                <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  {(() => {
+                    const scored = batches.filter((b) => Number(b.trustScore) > 0);
+                    if (scored.length === 0) return <span className="text-base text-gray-400">Not computed</span>;
+                    return Math.round(
+                      scored.reduce((s, b) => s + Number(b.trustScore), 0) / scored.length
+                    );
+                  })()}
+                </p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Flagged</p>
+                <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  {batches.filter((b) => b.status === 'Flagged').length}
+                </p>
+              </div>
             </div>
           </div>
 

@@ -6,20 +6,22 @@ export interface BatchRow {
   id: string;
   crop: string;
   qty: string;
+  /** Raw numeric quantity and unit, for aggregation. `qty` is display-only. */
+  quantity?: number;
+  unit?: string;
   harvestDate: string;
   trustScore: number;
   status: 'Exported' | 'In Transit' | 'Delivered' | 'Flagged' | 'Processing';
 }
 
-const defaultRows: BatchRow[] = [
-  { id: 'AG-2847', crop: 'Alphonso Mango', qty: '2,400 kg', harvestDate: '12 Mar 2026', trustScore: 89, status: 'Exported' },
-  { id: 'AG-2841', crop: 'Nashik Grapes', qty: '1,800 kg', harvestDate: '08 Mar 2026', trustScore: 76, status: 'In Transit' },
-  { id: 'AG-2835', crop: 'Basmati Rice', qty: '5,200 kg', harvestDate: '02 Mar 2026', trustScore: 92, status: 'Delivered' },
-  { id: 'AG-2829', crop: 'Kesar Saffron', qty: '120 kg', harvestDate: '24 Feb 2026', trustScore: 95, status: 'Delivered' },
-  { id: 'AG-2821', crop: 'Darjeeling Tea', qty: '680 kg', harvestDate: '18 Feb 2026', trustScore: 61, status: 'Flagged' },
-];
-
-export default function BatchTable({ rows = defaultRows }: { rows?: BatchRow[] }) {
+/**
+ * This table previously defaulted to five invented batches (Alphonso Mango at
+ * 89/100, Darjeeling Tea at 61/100, and so on) whenever the `rows` prop was
+ * omitted. A missing prop is now an empty table, never a fabricated one — a
+ * screen showing real crops and invented trust scores is the exact failure
+ * this project is supposed to prevent.
+ */
+export default function BatchTable({ rows = [] }: { rows?: BatchRow[] }) {
   return (
     <div className="glass-card overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -40,6 +42,13 @@ export default function BatchTable({ rows = defaultRows }: { rows?: BatchRow[] }
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100/50">
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-10 px-4 text-center text-gray-500 font-medium">
+                  No batches to show.
+                </td>
+              </tr>
+            )}
             {rows.map((row, idx) => {
               let scoreBadgeColor = 'bg-green-100 text-[#16a34a] border-green-200';
               if (row.trustScore < 50) scoreBadgeColor = 'bg-red-100 text-red-700 border-red-200';

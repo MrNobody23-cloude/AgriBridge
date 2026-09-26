@@ -1,127 +1,265 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import TrustScoreCard from '@/components/TrustScoreCard';
 
+/**
+ * Trust Score Explorer.
+ *
+ * This page previously shipped a hardcoded list of three batch codes and, on
+ * any error from the API, rendered a fabricated score of 87 with five invented
+ * factors labelled "Polygon Audit" and "FSSAI Verified" — including a
+ * "SHAP Interpretability" panel reading values that were typed into the
+ * fallback object. Nothing on screen came from the backend.
+ *
+ * The batch list is now fetched from /api/batches. A batch with no stored score
+ * reports that fact. Nothing is invented when a request fails, and the factor
+ * panel shows what each factor was measured against rather than a SHAP weight —
+ * no SHAP model is fitted over the trust factors in this project, so calling
+ * these SHAP values would be a false claim about the mechanism.
+ */
+
+interface Factor {
+    name: string;
+    score: number;
+    max: number | null;
+    desc: string;
+    weight: number;
+    observed: string;
+}
+
+interface ScoreData {
+    batchId: string;
+    batchCode: string;
+    crop: string;
+    farmerName: string;
+    finalScore: number;
+    riskLevel: string;
+    factors: Factor[];
+    unavailableFactors: { name: string; code: string; message: string }[];
+    coverageMax: number;
+    risks: string[];
+    plainAi: string;
+}
+
 export default function TrustScorePage() {
-  const [selectedBatchCode, setSelectedBatchCode] = useState('AGR-2026-UK-284701');
-  const [scoreData, setScoreData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+    const [batchCode, setBatchCode] = useState('');
+    const [batchOptions, setBatchOptions] = useState<string[]>([]);
+    const [scoreData, setScoreData] = useState<ScoreData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  // Simulation fallback to demonstrate component with realistic structure
-  const fetchScore = async (batchCode: string) => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/trust-score/${batchCode}`);
-      const json = await res.json();
-      if (json.success) {
-        setScoreData(json.data);
-      } else {
-        // Mock data to ensure the UI renders correctly if endpoint lacks data
-        setScoreData({
-          finalScore: 87,
-          riskLevel: 'GOOD',
-          crop: 'Alphonso Mango',
-          farmerName: 'Test Farmer',
-          plainAi: 'Your crop has high blockchain integrity and verified quality, but slightly low prediction confidence.',
-          factors: [
-            { name: 'Blockchain Integrity', score: 96, max: 100, shap: 12, desc: 'Polygon Audit' },
-            { name: 'Certificate Status', score: 100, max: 100, shap: 15, desc: 'FSSAI Verified' },
-            { name: 'Cold Chain', score: 82, max: 100, shap: -5, desc: 'Temperature deviations' },
-            { name: 'Compliance', score: 91, max: 100, shap: 8, desc: 'EU Standards' },
-            { name: 'ML Risk Analysis', score: 78, max: 100, shap: -12, desc: 'Spoilage Prediction' },
-          ]
-        });
-      }
-    } catch (e) {
-      console.error('Failed to fetch trust score:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Populate the selector from the real API instead of a hardcoded array.
+    useEffect(() => {
+        const loadBatches = async () => {
+            try {
+                const res = await fetch('/api/batches?limit=100');
+                const json = await res.json();
+                if (json.success && Array.isArray(json.data?.batches ?? json.data)) {
+                    const list = json.data?.batches ?? json.data;
+                    const codes: string[] = list
+                        .map((b: { batchCode?: string }) => b.batchCode)
+                        .filter((c: unknown): c is string => typeof c === 'string');
+                    setBatchOptions(codes);
+                    if (codes.length > 0) setBatchCode((prev) => prev || codes[0]);
+                }
+            } catch (e) {
+                console.error('Failed to load batches:', e);
+            }
+        };
+        loadBatches();
+    }, []);
 
-  useEffect(() => {
-    fetchScore(selectedBatchCode);
-  }, [selectedBatchCode]);
+    const fetchScore = useCallback(async (code: string) => {
+        if (!code) {
+            setScoreData(null);
+            setLoading(false);
+            return;
+        }
+        try {
+            setLoading(true);
+            setError(null);
+            const res = await fetch(`/api/trust-score/${encodeURIComponent(code)}`);
+            const json = await res.json();
+            if (json.success) {
+                setScoreData(json.data);
+            } else {
+                setScoreData(null);
+                setError(json?.error?.message || 'No trust score is available for this batch.');
+            }
+        } catch (e) {
+            console.error('Failed to fetch trust score:', e);
+            setScoreData(null);
+            setError('Could not reach the trust score service. No score is shown.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  return (
-    <DashboardLayout title="Trust Score Engine">
-      {/* Header Selector */}
-      <div className="glass-card p-6 flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-[#1a1a1a]">⭐ Explainable Trust Score Breakdown</h2>
-          <p className="text-xs text-gray-500 mt-1 font-medium">
-            Dynamic algorithm backed by ML Risk Analysis & Polygon audit trails.
-          </p>
-        </div>
+    useEffect(() => {
+        fetchScore(batchCode);
+    }, [batchCode, fetchScore]);
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-gray-700 uppercase tracking-widest">Select Batch</span>
-          <div className="flex bg-white/40 border border-white/60 p-1 rounded-xl">
-            {['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503'].map((code) => (
-              <button
-                key={code}
-                onClick={() => setSelectedBatchCode(code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${selectedBatchCode === code
-                  ? 'bg-agro-green text-white shadow-md'
-                  : 'text-gray-600 hover:bg-white/50'
-                  }`}
-              >
-                {code}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+    const factorScore = (name: string): number | undefined =>
+        scoreData?.factors?.find((f) => f.name.includes(name))?.score;
 
-      {scoreData && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="flex flex-col space-y-6">
-            <TrustScoreCard
-              score={scoreData.finalScore}
-              factors={{
-                blockchain: scoreData.factors?.find((f: any) => f.name.includes('Blockchain'))?.score || 0,
-                certificate: scoreData.factors?.find((f: any) => f.name.includes('Certificate'))?.score || 0,
-                coldChain: scoreData.factors?.find((f: any) => f.name.includes('Cold Chain'))?.score || 0,
-                compliance: scoreData.factors?.find((f: any) => f.name.includes('Compliance'))?.score || 0,
-                mlRisk: scoreData.factors?.find((f: any) => f.name.includes('ML Risk'))?.score || 0
-              }}
-            />
-
-            <div className="glass-panel p-6 relative overflow-hidden">
-              <h3 className="text-[10px] uppercase font-extrabold text-agro-green tracking-widest mb-2">AI Summary Insight</h3>
-              <p className="text-sm text-[#1a1a1a] font-medium leading-relaxed z-10 relative">
-                "{scoreData.plainAi}"
-              </p>
-              <div className="absolute right-[-10%] bottom-[-20%] text-[80px] opacity-10">🤖</div>
-            </div>
-          </div>
-
-          <div className="glass-card p-6 h-full flex flex-col">
-            <h3 className="text-sm font-bold uppercase tracking-wider mb-6">SHAP Interpretability Weights</h3>
-            <div className="flex-1 flex flex-col justify-center space-y-5">
-              {scoreData.factors?.map((f: any, idx: number) => (
-                <div key={idx} className="relative">
-                  <div className="flex justify-between text-xs font-bold mb-2 z-10 relative">
-                    <span>{f.name}</span>
-                    <span className={`${f.shap >= 0 ? 'text-agro-green' : 'text-red-500'}`}>
-                      SHAP: {f.shap >= 0 ? `+${f.shap}` : f.shap}
-                    </span>
-                  </div>
-                  <div className="w-full bg-black/5 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${f.shap >= 0 ? 'bg-agro-green' : 'bg-red-500'}`}
-                      style={{ width: `${Math.min(Math.abs(f.shap) * 5, 100)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-[10px] text-gray-500 mt-1 font-medium italic">{f.desc}</p>
+    return (
+        <DashboardLayout title="Trust Score Engine">
+            <div className="glass-card p-6 flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 className="text-xl font-bold text-[#1a1a1a]">⭐ Explainable Trust Score Breakdown</h2>
+                    <p className="text-xs text-gray-500 mt-1 font-medium">
+                        Every factor below is measured from stored evidence. Factors with no
+                        evidence contribute nothing and are listed as unavailable.
+                    </p>
                 </div>
-              ))}
+
+                <div className="flex items-center gap-3">
+                    <label htmlFor="batch-select" className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                        Select Batch
+                    </label>
+                    {batchOptions.length > 0 ? (
+                        <select
+                            id="batch-select"
+                            value={batchCode}
+                            onChange={(e) => setBatchCode(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/60 border border-white/60"
+                        >
+                            {batchOptions.map((code) => (
+                                <option key={code} value={code}>{code}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <span className="text-xs text-gray-500 font-medium">No batches available</span>
+                    )}
+                </div>
             </div>
-          </div>
-        </div>
-      )}
-    </DashboardLayout>
-  );
+
+            {loading && (
+                <div className="glass-card p-10 text-center text-sm text-gray-500 font-medium">
+                    Loading trust score…
+                </div>
+            )}
+
+            {!loading && error && (
+                <div className="glass-card p-10 text-center">
+                    <div className="text-3xl mb-3">📋</div>
+                    <p className="text-sm font-bold text-[#1a1a1a] mb-1">No trust score to show</p>
+                    <p className="text-xs text-gray-500 max-w-md mx-auto">{error}</p>
+                </div>
+            )}
+
+            {!loading && scoreData && (
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="flex flex-col space-y-6">
+                            <TrustScoreCard
+                                score={scoreData.finalScore}
+                                factors={{
+                                    blockchain: factorScore('Blockchain') ?? 0,
+                                    certificate: factorScore('Certificate') ?? 0,
+                                    coldChain: factorScore('Cold Chain') ?? 0,
+                                    compliance: factorScore('Compliance') ?? 0,
+                                    mlRisk: factorScore('ML') ?? 0,
+                                }}
+                            />
+
+                            {/* A score computed over a narrow base must not read
+                                like one computed over everything. */}
+                            {scoreData.coverageMax < 100 && (
+                                <div className="glass-panel p-4 border-l-4 border-l-amber-400">
+                                    <h3 className="text-[10px] uppercase font-extrabold text-amber-600 tracking-widest mb-1">
+                                        Partial Assessment
+                                    </h3>
+                                    <p className="text-xs text-[#1a1a1a] font-medium leading-relaxed">
+                                        This score is calculated from {scoreData.coverageMax} of 100
+                                        available points. {scoreData.unavailableFactors.length > 0
+                                            ? `${scoreData.unavailableFactors.length} factor(s) had no evidence and were not scored: ${scoreData.unavailableFactors.map((u) => u.name).join(', ')}.`
+                                            : 'The unavailable factors were not recorded when this score was stored.'}
+                                    </p>
+                                </div>
+                            )}
+
+                            {scoreData.unavailableFactors.length > 0 && (
+                                <div className="glass-panel p-4">
+                                    <h3 className="text-[10px] uppercase font-extrabold text-gray-500 tracking-widest mb-2">
+                                        Factors Not Scored
+                                    </h3>
+                                    <ul className="space-y-2">
+                                        {scoreData.unavailableFactors.map((u) => (
+                                            <li key={u.name} className="text-xs text-gray-600">
+                                                <span className="font-bold text-gray-800">{u.name}</span>
+                                                <span className="font-mono text-[10px] text-gray-400 ml-2">{u.code}</span>
+                                                <p className="text-[11px] text-gray-500 mt-0.5">{u.message}</p>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            <div className="glass-panel p-6 relative overflow-hidden">
+                                <h3 className="text-[10px] uppercase font-extrabold text-agro-green tracking-widest mb-2">
+                                    Plain-Language Summary
+                                </h3>
+                                <p className="text-sm text-[#1a1a1a] font-medium leading-relaxed z-10 relative">
+                                    {scoreData.plainAi}
+                                </p>
+                                <div className="absolute right-[-10%] bottom-[-20%] text-[80px] opacity-10">🤖</div>
+                            </div>
+                        </div>
+
+                        <div className="glass-card p-6 h-full flex flex-col">
+                            <h3 className="text-sm font-bold uppercase tracking-wider mb-1">Factor Evidence</h3>
+                            <p className="text-[11px] text-gray-500 mb-6 font-medium">
+                                What each factor was measured against. These are evidence notes,
+                                not SHAP values — no explainability model is fitted over these
+                                factors in this system.
+                            </p>
+                            <div className="flex-1 flex flex-col justify-center space-y-5">
+                                {scoreData.factors.length === 0 && (
+                                    <p className="text-sm text-gray-500 font-medium">
+                                        No factor could be scored for this batch.
+                                    </p>
+                                )}
+                                {scoreData.factors.map((f, idx) => {
+                                    const pct = f.max ? (f.score / f.max) * 100 : 0;
+                                    return (
+                                        <div key={idx} className="relative">
+                                            <div className="flex justify-between text-xs font-bold mb-2 z-10 relative">
+                                                <span>{f.name}</span>
+                                                <span className="font-mono">
+                                                    {f.score}/{f.max ?? '—'}
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-black/5 h-2.5 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-agro-green"
+                                                    style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+                                                ></div>
+                                            </div>
+                                            <p className="text-[10px] text-gray-500 mt-1 font-medium italic">{f.desc}</p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {scoreData.risks.length > 0 && (
+                                <div className="mt-6 pt-4 border-t border-gray-200">
+                                    <h4 className="text-[10px] uppercase font-extrabold text-gray-500 tracking-widest mb-2">
+                                        Risks
+                                    </h4>
+                                    <ul className="space-y-1">
+                                        {scoreData.risks.map((r, i) => (
+                                            <li key={i} className="text-[11px] text-gray-600">• {r}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </DashboardLayout>
+    );
 }

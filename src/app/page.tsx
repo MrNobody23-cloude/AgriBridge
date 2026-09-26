@@ -104,24 +104,30 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats Bar */}
+      {/* Capabilities Bar
+          This previously advertised "₹2.3Cr Farmer Earnings Protected", "2.3M
+          Batches on Blockchain", a "99.2% Fraud Detection Rate" and "47 Export
+          Countries". None of the four came from anywhere: there is no revenue
+          model, no payment tracking, and no chain has ever been written to in
+          this deployment. Real counts are shown in the page's own dashboard
+          views, which read from the API. */}
       <section className="bg-[#16a34a] text-white py-6 shadow-md">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">₹2.3Cr</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Farmer Earnings Protected</p>
+            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">8</p>
+            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Supply Chain Roles</p>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">2.3M</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Batches on Blockchain</p>
+            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">6</p>
+            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Trained ML Agents</p>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">99.2%</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Fraud Detection Rate</p>
+            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">6</p>
+            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Trust Factors, Evidence-Gated</p>
           </div>
           <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">47</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Export Countries</p>
+            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">100%</p>
+            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Authorization Enforced Server-Side</p>
           </div>
         </div>
       </section>
