@@ -27,23 +27,55 @@ QUALITY_GRADES = {0: "C", 1: "B", 2: "A", 3: "A+"}
 
 
 def _get_shap_values(model, X: np.ndarray, feature_names: List[str], model_type: str) -> List[Dict]:
-    """Compute SHAP values and return top contributing features."""
+    """Compute SHAP values and return top contributing features.
+
+    SHAP's return shape changed across versions, and both forms occur in the
+    wild for a multi-class XGBoost model:
+
+        shap < 0.45   -> list of arrays, one per class, each (n_samples, n_features)
+        shap >= 0.45  -> single array of (n_samples, n_features, n_classes)
+
+    The old code only handled the list form. Given the newer array it took
+    `shap_values[0]`, which is the (n_features, n_classes) matrix rather than a
+    feature vector, and then indexed it with a float — raising
+    "only integer scalar arrays can be converted to a scalar index". The
+    exception was swallowed and every prediction shipped with an empty
+    `top_features`, so the model was never actually explained to anyone.
+    """
     try:
         import shap
-        if model_type in ("xgboost",):
-            explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X)
-            # For multi-class, take max-abs across classes
-            if isinstance(shap_values, list):
-                sv = np.max([np.abs(sv) for sv in shap_values], axis=0)[0]
+        if model_type not in ("xgboost",):
+            return []
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X)
+
+        if isinstance(shap_values, list):
+            # One array per class: collapse to per-feature max |value|.
+            per_feature = np.max([np.abs(np.asarray(s)) for s in shap_values], axis=0)[0]
+        else:
+            arr = np.asarray(shap_values)
+            if arr.ndim == 3:
+                # (n_samples, n_features, n_classes) -> max |value| across classes.
+                per_feature = np.abs(arr[0]).max(axis=1)
+            elif arr.ndim == 2:
+                per_feature = np.abs(arr[0])
             else:
-                sv = np.abs(shap_values[0])
-            top_indices = np.argsort(sv)[::-1][:5]
-            return [
-                {"feature": feature_names[i], "importance": float(sv[i]), "value": float(X[0][i])}
-                for i in top_indices
-            ]
-        return []
+                return []
+
+        # Guard against a feature-count mismatch (e.g. a model refitted on a
+        # different feature list) rather than raising deep in the index loop.
+        n = min(len(per_feature), len(feature_names), X.shape[1])
+        if n == 0:
+            return []
+        top_indices = np.argsort(per_feature[:n])[::-1][:5]
+        return [
+            {
+                "feature": feature_names[i],
+                "importance": round(float(per_feature[i]), 6),
+                "value": round(float(X[0][i]), 4),
+            }
+            for i in top_indices
+        ]
     except Exception as e:
         logger.warning(f"SHAP computation failed: {e}")
         return []
@@ -93,6 +125,13 @@ def predict_spoilage(model, metadata: Dict, request: Dict) -> Dict[str, Any]:
     for sf in shap_features[:3]:
         explanation_parts.append(f"{sf['feature'].replace('_', ' ').title()} ({sf['value']:.1f})")
 
+    # Say so when the explainer produced nothing, rather than rendering a
+    # dangling "Key factors: ." that reads as a formatting bug.
+    if explanation_parts:
+        summary = f"Spoilage Risk: {risk_label}. Key factors: {', '.join(explanation_parts)}."
+    else:
+        summary = f"Spoilage Risk: {risk_label}. Feature attribution was unavailable for this prediction."
+
     return {
         "prediction": {
             "risk": risk_label,
@@ -103,7 +142,7 @@ def predict_spoilage(model, metadata: Dict, request: Dict) -> Dict[str, Any]:
             "recommendation": _spoilage_recommendation(risk_label, crop_info),
         },
         "explanation": {
-            "summary": f"Spoilage Risk: {risk_label}. Key factors: {', '.join(explanation_parts)}.",
+            "summary": summary,
             "top_features": shap_features,
             "methodology": "XGBoost classifier with SHAP TreeExplainer",
         },

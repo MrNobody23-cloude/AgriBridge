@@ -72,15 +72,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      # requirements-dev.txt pulls in requirements.txt and the test-only
+      # packages. CI previously hardcoded `pip install pytest pytest-asyncio
+      # httpx` on a separate line, which meant the list of things the suite
+      # needs lived in two places and only in one of them was it written down.
       - name: Install dependencies
-        run: |
-          cd ai-service
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+        run: pip install -r ai-service/requirements-dev.txt
       - name: Run tests
-        run: |
-          cd ai-service
-          pytest tests/ -v --tb=short
+        run: python -m pytest ai-service/tests -v --tb=short
         env:
           GEMINI_API_KEY: ""  # Tests must not require real API keys
 

@@ -1,0 +1,25 @@
+# Test-only dependencies for the AI service.
+#
+# These are deliberately NOT in requirements.txt: the service itself does not
+# import them, and a deployment should not carry a test runner. But the suite in
+# tests/ cannot run without them — pytest.ini sets `asyncio_mode = auto` and
+# every endpoint test is `async def`, so pytest-asyncio is not optional.
+#
+# These were previously installed only by a hardcoded `pip install` line in
+# .github/workflows/ci.yml, which meant CI passed while anyone following
+# requirements.txt locally — the documented setup path — could not run the
+# tests at all.
+#
+#   pip install -r ai-service/requirements.txt
+#   pip install -r ai-service/requirements-dev.txt
+#   python -m pytest ai-service/tests -v
+#
+# Then: pytest ai-service/tests -v --tb=short
+
+-r requirements.txt
+
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+# httpx is already a runtime dependency (the RAG and LLM clients use it), but it
+# is named here because the API tests pass it directly to AsyncClient/ASGITransport.
+httpx>=0.27.0
