@@ -3,7 +3,7 @@ AgriBridge AI — Model Loader
 
 Loads the six trained agent artifacts once at service startup and caches them.
 
-Two rules this module enforces, both deliberate:
+Three rules this module enforces, all deliberate:
 
 1. **The hash chain is verified before anything is deserialised.**
    ``pickle.load`` executes code embedded in the file, so a model artifact is
@@ -14,6 +14,14 @@ Two rules this module enforces, both deliberate:
 
 2. **An agent that cannot load is reported as unavailable, never as "ok".**
    ``status()`` carries the reason, and the router surfaces it verbatim.
+
+3. **An artifact that cannot run is not "loaded".**
+   A version mismatch is a *possibility*, not a verdict: a 1.7.1-fitted pickle
+   read back under 1.8.0 usually reconstructs fine. So the loader does not
+   quarantine on the version number alone — that would wrongly take down the
+   five agents that are provably fine. Instead every loaded artifact is given
+   one throwaway row through ``predict()``, and only an artifact that actually
+   raises is quarantined. See :meth:`AgentModelLoader._quarantine_incompatible`.
 """
 import hashlib
 import json
@@ -180,7 +188,7 @@ class AgentModelLoader:
                 logger.exception("Failed to load %s", name)
 
         self._loaded = True
-        self._check_sklearn_versions()
+        self._quarantine_incompatible()
         ok = [n for n in AGENT_NAMES if self.status_map[n]["loaded"]]
         logger.info("Agents ready: %d/%d — %s", len(ok), len(AGENT_NAMES), ", ".join(ok) or "none")
 
@@ -199,12 +207,16 @@ class AgentModelLoader:
         Warn when an artifact was fitted on a different scikit-learn than the
         one running.
 
-        This is the check that would have caught the quality agent's
-        `SimpleImputer._fill_dtype` failure at load time rather than at the first
-        request: a pickle stores the class layout of the version that fitted it,
-        so 1.7.1-fitted artifacts reconstructed under 1.8.0 can carry
-        attributes 1.8.0 expects and 1.7.1 never set. The artifact still
-        deserialises and still looks healthy, so nothing else would notice.
+        A pickle stores the class layout of the version that fitted it, so a
+        1.7.1-fitted artifact reconstructed under 1.8.0 can carry attributes
+        1.8.0 expects and 1.7.1 never set. The quality agent is exactly that
+        case: it deserialises cleanly, reports as loaded, and then raises
+        `AttributeError: 'SimpleImputer' object has no attribute '_fill_dtype'`
+        on every request.
+
+        This warning alone does not prevent that — it names the risk, it does
+        not act on it. :meth:`_quarantine_incompatible` runs next and is what
+        actually stops the broken artifact reaching a request.
         """
         running = running_sklearn()
         if not running:
@@ -230,6 +242,54 @@ class AgentModelLoader:
                     "`python agents/generate_digests.py`.",
                     name, trained_on, running, trained_on,
                 )
+
+    # ── Can it actually run? ─────────────────────────────────────────────────
+
+    def _quarantine_incompatible(self) -> None:
+        """
+        Give every loaded artifact one throwaway row and drop the ones that raise.
+
+        A version mismatch is a risk, not a verdict. Of the six artifacts
+        fitted on 1.7.1, five reconstruct under 1.8.0 and predict correctly
+        from the same loader, the same pickle module and the same class
+        layout; only the quality agent's `SimpleImputer` is missing a field
+        1.8.0's `transform()` dereferences. Quarantining on the version
+        number alone would therefore take down five working agents to fix one
+        broken one.
+
+        So the test is behavioural, not arithmetic: build a single row routed
+        the way the fitted pipeline itself routes its input, and call
+        `predict()`. The value that comes back is thrown away — this is a
+        liveness check, not a prediction, and nothing it returns is ever
+        surfaced. What matters is only whether the call raises.
+
+        On failure the artifact is removed from ``self.models`` and re-marked
+        unavailable with the real exception, so `/api/agents/registry` and
+        `run_agent` report it as down. They are never left to discover this on
+        a user's request.
+        """
+        for name in list(self.models):
+            model = self.models[name]
+            try:
+                _assert_predictable(model)
+            except Exception as exc:
+                del self.models[name]
+                trained_on = self.status_map.get(name, {}).get("sklearn_version")
+                running = running_sklearn()
+                detail = (
+                    f"artifact loads but cannot run: {type(exc).__name__}: {exc}"
+                )
+                if trained_on and running and trained_on != running:
+                    detail += (
+                        f". The artifact was fitted on scikit-learn {trained_on} and the "
+                        f"service is running {running}; install the pinned version "
+                        f"(scikit-learn=={trained_on}) or re-train the artifact and re-run "
+                        f"`python agents/generate_digests.py`"
+                    )
+                self._mark(name, False, detail)
+                logger.error("[%s] quarantined — %s", name, detail)
+            else:
+                logger.info("[%s] predict probe passed", name)
 
     # ── Access ───────────────────────────────────────────────────────────────
 
@@ -297,6 +357,71 @@ def record_training_environment(model: Any) -> Any:
     except Exception as exc:  # a frozen or slotted estimator refuses attributes
         logger.warning("Could not record the training scikit-learn: %s", exc)
     return model
+
+
+def _probe_frame(model: Any) -> "pd.DataFrame":
+    """
+    One row shaped the way the fitted pipeline expects its input.
+
+    Built from the pipeline's own fitted state rather than guessed:
+
+    * ``feature_names_in_`` gives the column set and order the pipeline was
+      fitted with, so a schema change is visible as a mismatch rather than
+      silently reordering inputs;
+    * ``ColumnTransformer.transformers_`` says which columns each sub-transformer
+      takes, and a fitted ``OneHotEncoder`` carries ``categories_`` — so a
+      categorical column is filled with a value the encoder has genuinely seen
+      instead of one it would reject or treat as unknown;
+    * everything else is ``0.0``, which every numeric transformer here
+      (scaler, imputer) accepts.
+
+    The contents are arbitrary on purpose. The row exists to make the fitted
+    code path execute; nothing it predicts is kept or shown.
+    """
+    from sklearn.compose import ColumnTransformer
+
+    # `is None`, never `or []`: feature_names_in_ is a numpy array, and
+    # `array or []` raises "truth value of an array is ambiguous" for any
+    # model that has one — which is all six of them.
+    names = getattr(model, "feature_names_in_", None)
+    columns = list(names) if names is not None else []
+
+    # A fitted one-hot encoder remembers the exact category strings it saw.
+    known_category: Dict[str, Any] = {}
+    for _, step in getattr(model, "steps", []):
+        if not isinstance(step, ColumnTransformer):
+            continue
+        for _, transformer, routed in step.transformers_:
+            categories = getattr(transformer, "categories_", None)
+            if not categories or routed is None:
+                continue
+            for column in routed:
+                known_category[column] = categories[0][0]
+
+    row = {}
+    for column in columns:
+        if column in known_category:
+            row[column] = pd.Series([known_category[column]], dtype=object)
+        else:
+            row[column] = pd.Series([0.0], dtype=float)
+    return pd.DataFrame(row, columns=columns)
+
+
+def _assert_predictable(model: Any) -> None:
+    """
+    Run one prediction, discarding the result. Raises if the artifact cannot.
+
+    Reached only for an artifact that already passed its SHA-256 gate and
+    deserialised, so the only thing left to establish is whether the fitted
+    code path still runs under this scikit-learn.
+
+    A model that is not a fitted pipeline has no ``predict`` to call and cannot
+    be checked; that is not a failure, and it is not treated as one.
+    """
+    if not hasattr(model, "predict"):
+        logger.debug("Artifact has no predict(); skipping the runnability probe")
+        return
+    model.predict(_probe_frame(model))
 
 
 def _sklearn_version(model: Any) -> Optional[str]:
