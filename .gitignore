@@ -66,18 +66,6 @@ venv/
 .venv/
 pip-log.txt
 
-# ML model artifacts
-#
-# The *legacy* XGBoost/IsolationForest models are large, reproducible from
-# ml/trainer.py, and not committed.
-ai-service/models/*.pkl
-ai-service/models/*.joblib
-ai-service/models/*.h5
-ai-service/models/*.pt
-ai-service/models/*.onnx
-!ai-service/models/README.md
-!ai-service/models/*.json
-
 # The six trained agents under models/agents/ ARE committed. They are the
 # deliverable — a real artifact is the only difference between a working agent
 # and one that reports "not configured" — and they are integrity-protected by

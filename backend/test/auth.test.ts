@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { requireAuth, requirePermission, generateToken, hashPassword, comparePassword, type UserPayload } from '@/lib/auth';
-import type { ApiResponse } from '@/lib/response';
-import { ROLES } from '@/lib/permissions';
+import { requireAuth, requirePermission, generateToken, hashPassword, comparePassword, type UserPayload } from '../../frontend/src/lib/auth';
+import type { ApiResponse } from '../../frontend/src/lib/response';
+import { ROLES } from '../../frontend/src/lib/permissions';
 
 vi.hoisted(() => {
     process.env.AUTH_SECRET = 'test_secret_for_agribridge_jwt';
