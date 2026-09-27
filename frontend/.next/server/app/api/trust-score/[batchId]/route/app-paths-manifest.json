@@ -1,3 +1,0 @@
-{
-  "/api/trust-score/[batchId]/route": "app/api/trust-score/[batchId]/route.js"
-}
