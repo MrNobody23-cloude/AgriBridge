@@ -1,0 +1,3 @@
+module.exports=[90878,e=>{"use strict";var r=e.i(95972);async function s(e){try{let s=e.metadata??(e.details?JSON.stringify(e.details):void 0);await (0,r.writeAuditLog)({userId:e.userId??null,action:e.action,resource:e.resource,resourceId:e.resourceId??null,metadata:s??null,ipAddress:e.ipAddress??null,userAgent:e.userAgent??null})}catch(e){console.error("[AuditLog] Failed to write audit log:",e)}}e.s(["createAuditLog",0,s])},70818,e=>{e.v(r=>Promise.all(["server/chunks/[externals]_zlib_0o2m2z7._.js","server/chunks/[root-of-the-server]__0j5eiy-._.js"].map(r=>e.l(r))).then(()=>r(81649)))},88910,e=>{e.v(e=>Promise.resolve().then(()=>e(42949)))}];
+
+//# sourceMappingURL=src_lib_0k3b3pv._.js.map

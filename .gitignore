@@ -4,7 +4,6 @@
 
 # Dependencies
 node_modules/
-**/node_modules/
 .pnp
 .pnp.*
 .yarn/*
@@ -14,18 +13,14 @@ node_modules/
 !.yarn/versions
 
 # Testing
-coverage/
-**/coverage/
+/coverage
 
 # Next.js
-.next/
-**/.next/
-out/
-**/out/
+/.next/
+/out/
 
 # Production build
-build/
-**/build/
+/build
 
 # Misc
 .DS_Store
@@ -48,14 +43,14 @@ prisma/test.db
 *.db-shm
 
 # Python
-ai-service/__pycache__/
-ai-service/*.pyc
-ai-service/.venv/
-ai-service/venv/
-ai-service/*.egg-info/
-ai-service/dist/
-ai-service/build/
-ai-service/.pytest_cache/
+backend/ai-service/__pycache__/
+backend/ai-service/*.pyc
+backend/ai-service/.venv/
+backend/ai-service/venv/
+backend/ai-service/*.egg-info/
+backend/ai-service/dist/
+backend/ai-service/build/
+backend/ai-service/.pytest_cache/
 __pycache__/
 *.pyc
 *.pyo
@@ -65,6 +60,25 @@ env/
 venv/
 .venv/
 pip-log.txt
+
+# ML model artifacts
+backend/ai-service/models/*.pkl
+backend/ai-service/models/*.joblib
+backend/ai-service/models/*.h5
+backend/ai-service/models/*.pt
+backend/ai-service/models/*.onnx
+!backend/ai-service/models/README.md
+!backend/ai-service/models/*.json
+
+# The six trained agents under models/agents/ ARE committed.
+!backend/ai-service/models/agents/
+!backend/ai-service/models/agents/*.pkl
+!backend/ai-service/models/agents/DIGESTS.json
+
+# Agent training datasets and evaluation output
+!backend/ai-service/results/
+!backend/ai-service/results/data/
+!backend/ai-service/results/data/*.csv
 
 # Stray output from ad-hoc seed/pnpm runs
 seed.out

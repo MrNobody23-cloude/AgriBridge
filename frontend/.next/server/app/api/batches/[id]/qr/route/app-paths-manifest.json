@@ -1,0 +1,3 @@
+{
+  "/api/batches/[id]/qr/route": "app/api/batches/[id]/qr/route.js"
+}

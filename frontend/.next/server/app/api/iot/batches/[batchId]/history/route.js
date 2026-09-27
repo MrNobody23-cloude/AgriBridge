@@ -1,0 +1,10 @@
+var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/iot/batches/[batchId]/history/route.js")
+R.c("server/chunks/src_lib_db_models_ts_1y5pdx_._.js")
+R.c("server/chunks/[root-of-the-server]__1gosew8._.js")
+R.c("server/chunks/_0f_j127._.js")
+R.c("server/chunks/_192m_i4._.js")
+R.c("server/chunks/src_lib_db_models_ts_12pncbg._.js")
+R.c("server/chunks/[root-of-the-server]__1d2kyf1._.js")
+R.c("server/chunks/1oeh_server_app_api_iot_batches_[batchId]_history_route_actions_0afj89j.js")
+R.m(6542)
+module.exports=R.m(6542).exports

@@ -1,0 +1,10 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/trust-score/[batchId]/route.js")
+R.c("server/chunks/[root-of-the-server]__1gosew8._.js")
+R.c("server/chunks/src_lib_db_models_ts_12pncbg._.js")
+R.c("server/chunks/[root-of-the-server]__1oua1_k._.js")
+R.c("server/chunks/[root-of-the-server]__0j5eiy-._.js")
+R.c("server/chunks/[root-of-the-server]__0l3yhx4._.js")
+R.c("server/chunks/_192m_i4._.js")
+R.c("server/chunks/_next-internal_server_app_api_trust-score_[batchId]_route_actions_201skjx.js")
+R.m(16431)
+module.exports=R.m(16431).exports

@@ -1,0 +1,11 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/fraud/investigate/route.js")
+R.c("server/chunks/src_lib_db_models_ts_14deu_i._.js")
+R.c("server/chunks/src_lib_db_models_ts_12pncbg._.js")
+R.c("server/chunks/[root-of-the-server]__1gosew8._.js")
+R.c("server/chunks/[root-of-the-server]__1d2kyf1._.js")
+R.c("server/chunks/_192m_i4._.js")
+R.c("server/chunks/src_lib_validators_ts_1ojzia4._.js")
+R.c("server/chunks/_1qz-guw._.js")
+R.c("server/chunks/_next-internal_server_app_api_fraud_investigate_route_actions_0ixn25v.js")
+R.m(57660)
+module.exports=R.m(57660).exports

@@ -1,0 +1,13 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/certificates/upload/route.js")
+R.c("server/chunks/src_lib_db_models_ts_1esm90g._.js")
+R.c("server/chunks/[root-of-the-server]__1exwxl4._.js")
+R.c("server/chunks/_1hso-39._.js")
+R.c("server/chunks/src_lib_db_models_ts_12pncbg._.js")
+R.c("server/chunks/[root-of-the-server]__0j5eiy-._.js")
+R.c("server/chunks/src_lib_validators_ts_1ojzia4._.js")
+R.c("server/chunks/[root-of-the-server]__0l3yhx4._.js")
+R.c("server/chunks/_192m_i4._.js")
+R.c("server/chunks/[root-of-the-server]__1eilfhc._.js")
+R.c("server/chunks/_next-internal_server_app_api_certificates_upload_route_actions_14t0b_v.js")
+R.m(54368)
+module.exports=R.m(54368).exports
