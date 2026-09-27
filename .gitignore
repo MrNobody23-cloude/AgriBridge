@@ -66,21 +66,6 @@ venv/
 .venv/
 pip-log.txt
 
-# The six trained agents under models/agents/ ARE committed. They are the
-# deliverable — a real artifact is the only difference between a working agent
-# and one that reports "not configured" — and they are integrity-protected by
-# the SHA-256 digests the loader checks before deserialising them. Track
-# DIGESTS.json with them: without it the loader refuses every artifact.
-!ai-service/models/agents/
-!ai-service/models/agents/*.pkl
-!ai-service/models/agents/DIGESTS.json
-
-# Agent training datasets and evaluation output — the evidence behind the
-# models, kept so a reviewer can re-run the training scripts.
-!ai-service/results/
-!ai-service/results/data/
-!ai-service/results/data/*.csv
-
 # Stray output from ad-hoc seed/pnpm runs
 seed.out
 
