@@ -15,14 +15,17 @@ jobs:
   lint-frontend:
     name: Lint & Type Check (Next.js)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npx prisma generate
       - run: npm run lint
       - run: npx tsc --noEmit
 
@@ -37,30 +40,44 @@ jobs:
       - name: Install linter
         run: pip install ruff
       - name: Run ruff
-        run: ruff check ai-service/
+        run: ruff check --config backend/ai-service/ruff.toml backend/ai-service/
 
   # ── Tests ──────────────────────────────────────────────────────────────────
-  test-frontend:
-    name: Frontend Unit Tests
+  test-backend:
+    name: Backend Unit Tests
     runs-on: ubuntu-latest
-    needs: lint-frontend
+    needs: lint-python
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      - name: Setup test database
+      - name: Configure environment
         run: |
-          cp .env.example .env
-          echo 'DATABASE_URL="file:./test.db"' >> .env
-          echo 'AUTH_SECRET="test-secret-for-ci-only-not-production"' >> .env
-      - run: npx prisma generate
-      - run: npx prisma migrate deploy
+          cp ../.env.example .env
+          {
+            echo 'MONGODB_URI="mongodb://127.0.0.1:27017/agribridge_ai_test"'
+            echo 'AUTH_SECRET="test-secret-for-ci-only-not-production"'
+          } >> .env
       - run: npm test
         env:
-          DATABASE_URL: "file:./test.db"
+          MONGODB_URI: "mongodb://127.0.0.1:27017/agribridge_ai_test"
           AUTH_SECRET: "test-secret-for-ci-only-not-production"
 
   test-python:
@@ -72,26 +89,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      # requirements-dev.txt pulls in requirements.txt and the test-only
-      # packages. CI previously hardcoded `pip install pytest pytest-asyncio
-      # httpx` on a separate line, which meant the list of things the suite
-      # needs lived in two places and only in one of them was it written down.
       - name: Install dependencies
-        run: pip install -r ai-service/requirements-dev.txt
+        run: pip install -r backend/ai-service/requirements-dev.txt
       - name: Run tests
-        run: python -m pytest ai-service/tests -v --tb=short
+        run: python -m pytest -c backend/ai-service/pytest.ini backend/ai-service/tests -v --tb=short
         env:
-          GEMINI_API_KEY: ""  # Tests must not require real API keys
+          GEMINI_API_KEY: ""
 
   test-blockchain:
     name: Hardhat Smart Contract Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - name: Compile contracts
         run: npx hardhat compile
@@ -102,27 +119,25 @@ jobs:
   build-frontend:
     name: Build Next.js
     runs-on: ubuntu-latest
-    needs: [test-frontend, test-blockchain]
+    needs: [lint-frontend, test-backend, test-blockchain]
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npx prisma generate
       - name: Build
         run: npm run build
         env:
-          DATABASE_URL: "file:./dev.db"
           AUTH_SECRET: "build-placeholder-not-real"
           NEXT_PUBLIC_APP_URL: "http://localhost:3000"
           AI_SERVICE_URL: "http://localhost:8000"
 
-  # ── Python AI service: run natively, no container ──────────────────────────
-  # The application is required to run natively on Windows/Linux/macOS, so CI
-  # exercises the same path a developer does. This job also fails loudly if a
-  # trained artifact is missing, which the Docker build never checked.
   build-python:
     name: Verify Python AI Service
     runs-on: ubuntu-latest
@@ -135,12 +150,12 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -r ai-service/requirements.txt
+          pip install -r backend/ai-service/requirements.txt
       - name: Import the agent modules
         run: |
           python - <<'PY'
           import sys, pathlib
-          sys.path.insert(0, str(pathlib.Path('ai-service').resolve()))
+          sys.path.insert(0, str(pathlib.Path('backend/ai-service').resolve()))
           import main, routers, rag.pipeline, ml.inference, agents.loader
           print('ai-service modules import cleanly')
           PY

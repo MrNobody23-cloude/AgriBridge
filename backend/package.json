@@ -1,0 +1,32 @@
+{
+    "name": "agribridge-backend",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "start": "python ai-service/main.py",
+        "seed": "tsx scripts/seed-test-users.ts",
+        "seed:test-users": "tsx scripts/seed-test-users.ts",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "bcryptjs": "^3.0.3",
+        "dotenv": "^18.0.3",
+        "ethers": "^6.17.0",
+        "jsonwebtoken": "^9.0.3",
+        "mongoose": "^8.24.4",
+        "zod": "^4.5.4"
+    },
+    "devDependencies": {
+        "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+        "@prisma/client": "^5.22.0",
+        "@types/jsonwebtoken": "^9.0.10",
+        "@types/node": "^24.19.0",
+        "hardhat": "^2.29.1",
+        "next": "16.3.0",
+        "prisma": "^5.22.0",
+        "tsx": "^4.23.13",
+        "typescript": "^5",
+        "vitest": "^2.1.9"
+    }
+}
