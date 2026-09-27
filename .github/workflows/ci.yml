@@ -42,7 +42,7 @@ jobs:
       - name: Run ruff
         run: ruff check --config backend/ai-service/ruff.toml backend/ai-service/
 
-  # ── Tests ──────────────────────────────────────────────────────────────────
+  # ── Tests ────────────────────────────────────────────────────────────────
   test-backend:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
@@ -62,12 +62,22 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci
+
       - name: Configure environment
         run: |
           cp ../.env.example .env
@@ -75,6 +85,7 @@ jobs:
             echo 'MONGODB_URI="mongodb://127.0.0.1:27017/agribridge_ai_test"'
             echo 'AUTH_SECRET="test-secret-for-ci-only-not-production"'
           } >> .env
+
       - run: npm test
         env:
           MONGODB_URI: "mongodb://127.0.0.1:27017/agribridge_ai_test"
@@ -115,7 +126,7 @@ jobs:
       - name: Run contract tests
         run: npx hardhat test
 
-  # ── Build ──────────────────────────────────────────────────────────────────
+  # ── Build ────────────────────────────────────────────────────────────────
   build-frontend:
     name: Build Next.js
     runs-on: ubuntu-latest
