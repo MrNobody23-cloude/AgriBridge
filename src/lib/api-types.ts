@@ -143,26 +143,57 @@ export interface ApiBatchDetail extends ApiBatch {
     farmer?: ApiFarmer | null;
 }
 
-/** A shipment row. */
+/**
+ * A shipment, as `/api/shipments` returns it.
+ *
+ * `listShipmentsForUser` returns `ShipmentWithRelations`, which nests the batch
+ * (with its product and farmer) and the exporter, and attaches
+ * `complianceChecks` and `fraudAlerts`. `riskScore` is a real column on the
+ * shipment document, written at creation — it is not derived here.
+ *
+ * `batch` is nullable for the same reason `farmer` is on `ApiBatchDetail`: the
+ * batch row can be absent.
+ */
 export interface ApiShipment {
     _id: string;
     shipmentCode: string;
     batchId?: string;
-    batchCode?: string;
+    destinationCountry?: string;
+    quantity?: number;
+    unit?: string;
     status?: string;
-    origin?: string;
-    destination?: string;
+    riskScore?: number;
+    estimatedArrival?: string | null;
     createdAt?: string;
+    exporter?: { _id?: string; name?: string; email?: string } | null;
+    batch?: (ApiBatch & {
+        product?: ApiProduct | null;
+        farmer?: ApiFarmer | null;
+    }) | null;
+    complianceChecks?: ApiComplianceCheck[];
+    fraudAlerts?: ApiFraudAlert[];
 }
 
-/** A compliance check, as `/api/compliance/check` returns it. */
+/**
+ * A stored compliance check, as `/api/compliance/check` and the shipment
+ * relation both return it.
+ *
+ * There is no `complianceStatus` or `screenedAt` on a shipment — the exporter
+ * dashboard's two stat tiles filtered on both, and both fields exist on neither
+ * `ShipmentDoc` nor `ComplianceCheckDoc`, so each tile read a permanent `0`.
+ * A shipment's screening state is `complianceChecks[].status`, and "was it
+ * screened at all" is `complianceChecks.length > 0`. That is what the tiles
+ * count now.
+ */
 export interface ApiComplianceCheck {
+    _id?: string;
     country: string;
     requirement: string;
     status: string;
     explanation?: string;
     source?: string;
     evidence?: unknown;
+    createdAt?: string;
 }
 
 /** A retrieval source from the RAG service. */
@@ -179,20 +210,44 @@ export interface ApiComplianceResult {
     passed?: boolean;
     checks?: ApiComplianceCheck[];
     summary?: string;
-    sources?: ApiSource[];
+    /**
+     * **The service returns two different shapes here, so this is a union.**
+     *
+     * `ai-service/rag/pipeline.py` builds `sources` as a bare `string[]` on
+     * the retrieval path (line 210) and as a list of `{ title, source }`
+     * objects on the two citation paths (lines 250 and 260). Typing it
+     * `ApiSource[]` let a string through as `undefined` at the consumer, so the
+     * importer page rendered `[object Object]` for one path and nothing for the
+     * other. Callers must narrow with `typeof src === 'string'`.
+     */
+    sources?: (string | ApiSource)[];
     confidence?: number;
     warning?: string;
 }
 
-/** A fraud alert row. */
+/**
+ * A fraud alert, as `/api/fraud/alerts` returns it.
+ *
+ * `listFraudAlerts` returns bare `FraudAlertDoc` rows — **no `batch` is
+ * attached**. The regulator page rendered `alert.batch.batchCode` behind an
+ * `alert.batch &&` guard, so nothing crashed, but the batch code was never
+ * shown: the guard was permanently false. `batchId` is the only batch
+ * reference on the wire, which is why it is the field offered here.
+ */
 export interface ApiFraudAlert {
     _id: string;
-    batchId?: string;
-    batchCode?: string;
-    alertType?: string;
+    batchId?: string | null;
+    shipmentId?: string | null;
+    fraudType?: string;
     severity?: string;
     status?: string;
     description?: string;
+    evidence?: string | null;
+    /** 0–1. How strongly the detecting rule fired, not a calibrated probability. */
+    confidence?: number;
+    resolvedBy?: string | null;
+    resolvedAt?: string | null;
+    notes?: string | null;
     createdAt?: string;
 }
 

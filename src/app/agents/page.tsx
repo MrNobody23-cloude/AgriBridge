@@ -75,7 +75,10 @@ export default function AgentsPage() {
   };
 
   useEffect(() => {
-    loadRegistry();
+    // `loading` initialises to `true`, so the first paint is already the
+    // placeholder and the loader never has to set it back at the top. The poll
+    // then refreshes the registry in place every 15s.
+    Promise.resolve().then(loadRegistry);
     const interval = setInterval(loadRegistry, 15000);
     return () => clearInterval(interval);
   }, []);

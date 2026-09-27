@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import type { ApiShipment, ApiComplianceResult } from '@/lib/api-types';
+import { errText } from '@/lib/err';
 
 export default function ExporterDashboard() {
-  const [shipments, setShipments] = useState<any[]>([]);
+  const [shipments, setShipments] = useState<ApiShipment[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal / Action states
@@ -18,7 +20,7 @@ export default function ExporterDashboard() {
 
   // RAG Compliance State
   const [complianceCountry, setComplianceCountry] = useState('UK');
-  const [ragResult, setRagResult] = useState<any>(null);
+  const [ragResult, setRagResult] = useState<ApiComplianceResult | null>(null);
   const [checkingCompliance, setCheckingCompliance] = useState(false);
 
   // Certificate Upload State
@@ -28,7 +30,6 @@ export default function ExporterDashboard() {
 
   const fetchShipments = async () => {
     try {
-      setLoading(true);
       const res = await fetch('/api/shipments');
       const json = await res.json();
       if (json.success) {
@@ -42,7 +43,12 @@ export default function ExporterDashboard() {
   };
 
   useEffect(() => {
-    fetchShipments();
+    // Deferred to a microtask, and `loading` is never set to `true` here. It
+    // initialises to `true`, so the first paint is already a spinner; a second
+    // render before the fetch resolves is the cascade this avoids. A manual
+    // refresh therefore keeps the current table visible instead of blanking it
+    // to "Loading shipments…" for a list the user was already reading.
+    Promise.resolve().then(fetchShipments);
   }, []);
 
   const handleCreateShipment = async (e: React.FormEvent) => {
@@ -66,8 +72,8 @@ export default function ExporterDashboard() {
       } else {
         alert(json.error?.message || 'Failed to create shipment');
       }
-    } catch (err: any) {
-      alert(err.message || 'Server error creating shipment');
+    } catch (err: unknown) {
+      alert(errText(err) || 'Server error creating shipment');
     } finally {
       setCreatingShipment(false);
     }
@@ -123,8 +129,8 @@ export default function ExporterDashboard() {
       } else {
         alert(json.error?.message || 'Failed to upload certificate');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error uploading certificate');
+    } catch (err: unknown) {
+      alert(errText(err) || 'Error uploading certificate');
     } finally {
       setUploadingCert(false);
     }
@@ -159,7 +165,7 @@ export default function ExporterDashboard() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Compliance Checks Run</p>
             <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
-              {shipments.filter((s) => s.complianceStatus && s.complianceStatus !== 'PENDING').length}
+              {shipments.filter((s) => (s.complianceChecks?.length ?? 0) > 0 && s.complianceChecks!.some((c) => c.status !== 'PENDING')).length}
             </p>
             <span className="text-[11px] font-semibold text-gray-500 mt-1 block">
               RAG runs per shipment, not a pass rate
@@ -174,7 +180,7 @@ export default function ExporterDashboard() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Screened Shipments</p>
             <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
-              {shipments.filter((s) => s.screenedAt || s.complianceStatus).length} / {shipments.length}
+              {shipments.filter((s) => (s.complianceChecks?.length ?? 0) > 0).length} / {shipments.length}
             </p>
             <span className="text-[11px] font-semibold text-gray-500 block">
               With a recorded compliance result
@@ -309,7 +315,7 @@ export default function ExporterDashboard() {
                 {ragResult.summary}
               </div>
               <div className="space-y-2">
-                {ragResult.checks.map((chk: any, idx: number) => (
+                {ragResult.checks?.map((chk, idx) => (
                   <div key={idx} className="p-3 bg-[#FAFAF7] rounded-xl border border-gray-200 text-xs flex justify-between items-center">
                     <div>
                       <span className="font-bold text-[#1a1a1a]">{chk.requirement}</span>
@@ -382,7 +388,7 @@ export default function ExporterDashboard() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {shipments.map((ship, idx) => (
-                <tr key={ship.id || idx} className="hover:bg-gray-50">
+                <tr key={ship._id || idx} className="hover:bg-gray-50">
                   <td className="py-3 px-4 font-mono font-bold text-blue-600">{ship.shipmentCode}</td>
                   {/* A shipment whose batch relation is missing previously
                       rendered "AG-2847 / Alphonso Mango", so a row with no

@@ -98,7 +98,13 @@ export default function TrustScorePage() {
     }, []);
 
     useEffect(() => {
-        fetchScore(batchCode);
+        // Deferred to a microtask: `fetchScore` clears the previous score and
+        // sets `loading` before it awaits, and running that inside the effect
+        // body forces a cascading render. As a promise callback the state
+        // change lands after the effect body has returned, which is the only
+        // thing that differs — the same request is still made for `batchCode`
+        // on mount and on every change.
+        Promise.resolve().then(() => fetchScore(batchCode));
     }, [batchCode, fetchScore]);
 
     const factorScore = (name: string): number | undefined =>

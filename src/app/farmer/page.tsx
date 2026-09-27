@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { errText } from '@/lib/err';
+import type { ApiBatch } from '@/lib/api-types';
 import BatchTable, { BatchRow } from '@/components/BatchTable';
 import QRCode from 'qrcode';
 
@@ -25,13 +27,12 @@ export default function FarmerDashboard() {
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchBatches = async () => {
+  const fetchBatches = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await fetch(`/api/batches${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`);
       const json = await res.json();
       if (json.success) {
-        const rows: BatchRow[] = json.data.map((b: any) => ({
+        const rows: BatchRow[] = json.data.map((b: ApiBatch) => ({
           id: b.batchCode,
           crop: b.product?.name || 'Crop Batch',
           qty: `${b.quantity.toLocaleString()} kg`,
@@ -39,7 +40,7 @@ export default function FarmerDashboard() {
           unit: b.unit || 'kg',
           harvestDate: new Date(b.harvestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           trustScore: b.trustScore,
-          status: b.status as any,
+          status: b.status,
         }));
         setBatches(rows);
       }
@@ -48,11 +49,15 @@ export default function FarmerDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+    // `loading` starts as `true` and is never set back at the top, so the first
+    // paint is a spinner and no render is triggered before the fetch resolves.
+    // A search therefore refetches behind the existing rows rather than
+    // replacing the table with a spinner the farmer did not ask for.
+  }, [searchQuery]);
 
   useEffect(() => {
-    fetchBatches();
-  }, [searchQuery]);
+    Promise.resolve().then(fetchBatches);
+  }, [fetchBatches]);
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,8 +104,8 @@ export default function FarmerDashboard() {
       } else {
         alert(json.error?.message || 'Failed to register batch');
       }
-    } catch (err: any) {
-      alert(err.message || 'Server error while registering batch');
+    } catch (err: unknown) {
+      alert(errText(err) || 'Server error while registering batch');
     } finally {
       setSubmitting(false);
     }

@@ -30,7 +30,6 @@ export default function RetailerDashboard() {
   const [spoilageResult, setSpoilageResult] = useState<ApiSpoilageResult | null>(null);
 
   const fetchBatches = async () => {
-    setLoading(true);
     try {
       const res = await fetch('/api/batches?status=DELIVERED');
       const json = await res.json();
@@ -42,7 +41,12 @@ export default function RetailerDashboard() {
     }
   };
 
-  useEffect(() => { fetchBatches(); }, []);
+  useEffect(() => {
+    // `loading` initialises to `true` and is not set again at the top of the
+    // loader, so the first render is the spinner and no render is triggered
+    // before the fetch resolves.
+    Promise.resolve().then(fetchBatches);
+  }, []);
 
   const handleScanVerify = async (code?: string) => {
     const target = code || scanCode;

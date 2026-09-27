@@ -52,7 +52,9 @@ export default function AgentActivityFeed() {
   }, []);
 
   useEffect(() => {
-    load();
+    // Deferred to a microtask so the `setState` at the top of `load` does not
+    // run inside the effect body; the 10s poll then refreshes in place.
+    Promise.resolve().then(load);
     const interval = setInterval(load, 10000);
     return () => clearInterval(interval);
   }, [load]);

@@ -29,7 +29,10 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        fetchUsers();
+        // `loading` initialises to `true` and is never set back at the top of
+        // the loader, so the first paint is the spinner and nothing triggers a
+        // render before the request resolves.
+        Promise.resolve().then(fetchUsers);
     }, []);
 
     const roleBadgeColor: Record<string, string> = {

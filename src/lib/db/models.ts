@@ -805,6 +805,21 @@ export interface RagDocumentDoc {
 
 // ─── MODEL REGISTRY ───────────────────────────────────────────────────────────
 
+/**
+ * Every registered model, at its widest.
+ *
+ * **The `any` is load-bearing and is not a shortcut.** Typing each of the 18
+ * models as `Model<ItsOwnDoc>` makes Mongoose instantiate a distinct
+ * `Model<T>` for every one, and `tsc` exhausts the 8 GB heap partway through
+ * this file and exits without producing output. `Model<any>` collapses them to
+ * a single instantiation, which typechecks in a second.
+ *
+ * The cost is that `.lean()` on a model registered here is untyped and cannot
+ * take a type argument — which is why every repository declares its own return
+ * interface and spells the projection out, rather than inferring the shape from
+ * the model. Callers get real types; only this registry is wide.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
 type AnyModel = Model<any>;
 
 function register(name: string, schema: Schema, model?: AnyModel): AnyModel {

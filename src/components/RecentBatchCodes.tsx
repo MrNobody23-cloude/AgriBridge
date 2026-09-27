@@ -26,6 +26,15 @@ export default function RecentBatchCodes({
 }) {
     const [existing, setExisting] = useState<string[] | null>(null);
 
+    // The effect re-runs when the *contents* of `codes` change, not when the
+    // parent happens to hand over a new array with the same items. `codes` is a
+    // literal in the consumer page's state, so its identity changes on every
+    // parent render and would otherwise re-probe every batch on each keystroke.
+    // The joined key is extracted into a variable because a `codes.join('|')`
+    // expression in the dependency array cannot be statically checked — the
+    // rule cannot see that it reads `codes` and assume the list never changes.
+    const codesKey = codes.join('|');
+
     useEffect(() => {
         let cancelled = false;
 
@@ -50,7 +59,7 @@ export default function RecentBatchCodes({
         return () => {
             cancelled = true;
         };
-    }, [codes.join('|')]);
+    }, [codesKey, codes]);
 
     // While resolving, render nothing rather than the unverified codes.
     if (!existing || existing.length === 0) return null;

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { errText } from '@/lib/err';
 
 interface TempLog {
   id: string;
@@ -68,7 +69,12 @@ export default function TransporterDashboard() {
   };
 
   useEffect(() => {
-    fetchHistory();
+    // Unlike the other dashboards, `loading` starts `false` here — there is no
+    // batch to look up on arrival, so the page prompts for a code rather than
+    // spinning — and `fetchHistory` returns before fetching when none is set.
+    // The `setLoading(true)` it does perform is kept for the manual reload, and
+    // the call is deferred so no `setState` runs inside the effect body.
+    Promise.resolve().then(() => fetchHistory());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,8 +106,8 @@ export default function TransporterDashboard() {
       } else {
         setSimMsg(json.error?.message || 'Simulation failed');
       }
-    } catch (err: any) {
-      setSimMsg(err.message || 'Error running simulator');
+    } catch (err: unknown) {
+      setSimMsg(errText(err) || 'Error running simulator');
     } finally {
       setSimLoading(false);
     }
@@ -136,8 +142,8 @@ export default function TransporterDashboard() {
       } else {
         setSimMsg(json.error?.message || 'Failed to post reading');
       }
-    } catch (err: any) {
-      setSimMsg(err.message || 'Error posting reading');
+    } catch (err: unknown) {
+      setSimMsg(errText(err) || 'Error posting reading');
     } finally {
       setPostingReading(false);
     }

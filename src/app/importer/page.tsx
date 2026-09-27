@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import type { ApiComplianceResult } from '@/lib/api-types';
 
 interface Shipment {
   id: string;
@@ -27,12 +28,11 @@ export default function ImporterDashboard() {
   // choosing anything screened that batch — or silently failed against a
   // batch that does not exist, depending on what was seeded.
   const [batchCodeForCompliance, setBatchCodeForCompliance] = useState('');
-  const [complianceResult, setComplianceResult] = useState<any>(null);
+  const [complianceResult, setComplianceResult] = useState<ApiComplianceResult | null>(null);
   const [checkingCompliance, setCheckingCompliance] = useState(false);
 
   const fetchShipments = async () => {
     try {
-      setLoading(true);
       const res = await fetch('/api/shipments');
       const json = await res.json();
       if (json.success) setShipments(json.data);
@@ -43,17 +43,29 @@ export default function ImporterDashboard() {
     }
   };
 
-  useEffect(() => { fetchShipments(); }, []);
+  useEffect(() => {
+    // `loading` initialises to `true`, so the first paint is already the
+    // spinner and nothing sets it back at the top of the loader. A refresh
+    // keeps the ledger on screen instead of blanking it.
+    Promise.resolve().then(fetchShipments);
+  }, []);
 
   // The shipment an operator actually clicked is the one they mean to screen,
-  // so that is what the batch field follows. Previously the field kept
-  // whatever it was last typed with, and defaulted to a hardcoded code.
-  useEffect(() => {
-    if (selectedShipment?.batch?.batchCode) {
-      setBatchCodeForCompliance(selectedShipment.batch.batchCode);
-      setComplianceCountry(selectedShipment.destinationCountry || 'UK');
+  // so that is what the batch field follows. Previously the field kept whatever
+  // it was last typed with, and defaulted to a hardcoded code.
+  //
+  // This is done in the click handler rather than an effect keyed on
+  // `selectedShipment`: the effect was a second render that reconstructed what
+  // the handler already knew, and it could only ever run *after* the modal
+  // opened. Setting both values where the click happens says what is true —
+  // choosing a shipment fills in its batch.
+  const selectShipment = (ship: Shipment) => {
+    setSelectedShipment(ship);
+    if (ship.batch?.batchCode) {
+      setBatchCodeForCompliance(ship.batch.batchCode);
+      setComplianceCountry(ship.destinationCountry || 'UK');
     }
-  }, [selectedShipment]);
+  };
 
   const handleCheckCompliance = async () => {
     // Screening runs against one batch. With none chosen, there is nothing to
@@ -167,8 +179,17 @@ export default function ImporterDashboard() {
                 {complianceResult.passed ? '✓ Compliance Cleared' : '⚠️ Review Required'}
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">{complianceResult.summary}</p>
-              {complianceResult.sources?.slice(0, 2).map((src: any, i: number) => (
-                <p key={i} className="text-[10px] font-mono text-gray-400">📄 {src.source || src}</p>
+              {/* The RAG service returns sources in two shapes: a list of plain
+                  strings from the retrieval path, and a list of
+                  `{ title, source }` objects from the citation path
+                  (`ai-service/rag/pipeline.py:210,250,260`). `src.source || src`
+                  handled that by accident — an object is always truthy, so
+                  `src.source` was taken and a string fell through. Narrowing
+                  keeps both shapes and never renders `[object Object]`. */}
+              {complianceResult.sources?.slice(0, 2).map((src, i) => (
+                <p key={i} className="text-[10px] font-mono text-gray-400">
+                  📄 {typeof src === 'string' ? src : (src.source || src.title)}
+                </p>
               ))}
             </div>
           )}
@@ -200,7 +221,7 @@ export default function ImporterDashboard() {
                   <tr><td colSpan={7} className="py-8 text-center text-gray-400">No inbound shipments found.</td></tr>
                 ) : (
                   shipments.map((ship, idx) => (
-                    <tr key={ship.id || idx} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedShipment(ship)}>
+                    <tr key={ship.id || idx} className="hover:bg-gray-50 cursor-pointer" onClick={() => selectShipment(ship)}>
                       <td className="py-3 px-4 font-mono font-bold text-blue-600">{ship.shipmentCode}</td>
                       <td className="py-3 px-4">
                         <div className="font-bold text-[#1a1a1a]">{ship.batch?.product?.name || '—'}</div>

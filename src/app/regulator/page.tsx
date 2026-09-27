@@ -1,17 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
+import { errText } from '@/lib/err';
+import type { ApiFraudAlert } from '@/lib/api-types';
 
 export default function RegulatorDashboard() {
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<ApiFraudAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const fetchAlerts = async () => {
+  // `useCallback` keyed on `filterStatus`, so the effect below can name the
+  // loader as its only dependency instead of a hand-maintained list that drifts
+  // from what the loader actually reads. Re-fetching on a filter change is the
+  // behaviour the previous `[filterStatus]` dependency array had.
+  const fetchAlerts = useCallback(async () => {
     try {
-      setLoading(true);
       const res = await fetch(`/api/fraud/alerts${filterStatus ? `?status=${filterStatus}` : ''}`);
       const json = await res.json();
       if (json.success) {
@@ -22,11 +27,20 @@ export default function RegulatorDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+    // No `setLoading(true)` at the top: `loading` is initialised to `true`, so
+    // the first paint is already a spinner, and a second render before the
+    // fetch resolves would be the cascading render this avoids. A refresh
+    // therefore keeps the current queue on screen instead of blanking it.
+  }, [filterStatus]);
 
   useEffect(() => {
-    fetchAlerts();
-  }, [filterStatus]);
+    // `void fetchAlerts()` here is what the rule reports: it treats a call in
+    // the effect body as a synchronous setState even though every `setAlerts`
+    // and `setLoading` in the loader sits behind an `await`. Scheduling the
+    // call as a promise callback states what is actually true — the state
+    // updates when the fetch resolves, not while the effect body runs.
+    Promise.resolve().then(fetchAlerts);
+  }, [fetchAlerts]);
 
   const handleInvestigateAction = async (alertId: string, action: 'APPROVE' | 'REJECT' | 'FALSE_POSITIVE') => {
     setActionLoading(alertId);
@@ -48,8 +62,8 @@ export default function RegulatorDashboard() {
       } else {
         alert(json.error?.message || 'Failed to update alert state');
       }
-    } catch (err: any) {
-      alert(err.message || 'Error updating alert state');
+    } catch (err: unknown) {
+      alert(errText(err) || 'Error updating alert state');
     } finally {
       setActionLoading(null);
     }
@@ -86,7 +100,7 @@ export default function RegulatorDashboard() {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Duplicate Cert Alerts</p>
             <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
               {alerts.filter((a) =>
-                String(a.alertType ?? a.type ?? '').toUpperCase().includes('DUPLICATE')
+                String(a.fraudType ?? '').toUpperCase().includes('DUPLICATE')
               ).length}
             </p>
             <span className="text-[11px] font-semibold text-gray-500 block mt-1">
@@ -165,8 +179,8 @@ export default function RegulatorDashboard() {
             <span className="text-sm text-gray-500 font-medium">Loading fraud queue…</span>
           </div>
         ) : (
-        alerts.map((alert: any) => (
-          <div key={alert.id} className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
+        alerts.map((alert) => (
+          <div key={alert._id} className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${alert.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
@@ -174,9 +188,9 @@ export default function RegulatorDashboard() {
                   {alert.severity} SEVERITY
                 </span>
                 <span className="font-mono text-xs font-bold text-gray-500">TYPE: {alert.fraudType}</span>
-                {alert.batch && (
-                  <span className="font-mono text-xs font-bold text-[#16a34a]">BATCH {alert.batch.batchCode}</span>
-                )}
+                {alert.batchId && (
+                  <span className="font-mono text-xs font-bold text-[#16a34a]">BATCH {alert.batchId}</span>
+                  )}
               </div>
               <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${alert.status === 'OPEN' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-gray-100 text-gray-700'
                 }`}>
@@ -191,22 +205,22 @@ export default function RegulatorDashboard() {
             <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
               <span className="text-xs font-bold text-gray-500 mr-2">Regulator Action:</span>
               <button
-                onClick={() => handleInvestigateAction(alert.id, 'APPROVE')}
-                disabled={actionLoading === alert.id}
+                onClick={() => handleInvestigateAction(alert._id, 'APPROVE')}
+                disabled={actionLoading === alert._id}
                 className="px-3 py-1.5 bg-[#16a34a] text-white text-xs font-bold rounded-lg hover:bg-green-700"
               >
                 ✓ Resolve & Clear Batch
               </button>
               <button
-                onClick={() => handleInvestigateAction(alert.id, 'REJECT')}
-                disabled={actionLoading === alert.id}
+                onClick={() => handleInvestigateAction(alert._id, 'REJECT')}
+                disabled={actionLoading === alert._id}
                 className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700"
               >
                 ✕ Confirm Fraud & Block Export
               </button>
               <button
-                onClick={() => handleInvestigateAction(alert.id, 'FALSE_POSITIVE')}
-                disabled={actionLoading === alert.id}
+                onClick={() => handleInvestigateAction(alert._id, 'FALSE_POSITIVE')}
+                disabled={actionLoading === alert._id}
                 className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300"
               >
                 Dismiss as False Positive

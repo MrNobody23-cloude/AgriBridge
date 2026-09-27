@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/auth';
 import { complianceCheckSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
 import { isZodError, firstValidationMessage } from '@/lib/zod-error';
+import type { ApiSource } from '@/lib/api-types';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -57,7 +58,40 @@ export async function POST(req: NextRequest) {
         }
 
         const answer = String(ragResult.answer || '');
-        const sources = (ragResult.sources as any[]) || [];
+        // The RAG service sends `sources` in one of two shapes — a bare list of
+        // citation strings on the retrieval path, or a list of
+        // `{ title, source }` objects on the citation paths
+        // (`ai-service/rag/pipeline.py:210,250,260`). `ragResult` is
+        // `Record<string, unknown>`, so the value is unverified: it may be
+        // absent, `null`, or not an array at all. Narrowing once here means the
+        // stored `source`, the returned `sources` and the agent log all
+        // describe the same citations, and neither downstream read has to
+        // guess.
+        const sources: (string | ApiSource)[] = Array.isArray(ragResult.sources)
+            ? (ragResult.sources as (string | ApiSource)[])
+            : [];
+
+        /**
+         * The document name for one source, whichever shape it arrived in.
+         *
+         * Before this, `sources[0]?.source` was read directly. On the string
+         * path — which is the path that runs when the service *does* answer —
+         * `.source` is `undefined`, so a check with real retrievals behind it
+         * was persisted and logged as "No regulatory source retrieved — RAG
+         * service did not respond". The service was working; only the read was
+         * wrong.
+         */
+        const sourceName = (src: string | ApiSource | undefined): string => {
+            if (!src) return '';
+            if (typeof src === 'string') return src;
+            return src.source || src.title || '';
+        };
+
+        // The citation names the document that was actually retrieved. With
+        // nothing retrieved there is no document, so it says so rather than
+        // naming a knowledge base that was never queried.
+        const firstSource = sourceName(sources[0]) ||
+            'No regulatory source retrieved — RAG service did not respond';
         // An unanswered check has no retrieval behind it, so it has no
         // confidence to report. This defaulted to 0.7 whenever the AI service
         // did not answer, which wrote a fabricated score into AiAgentLog and
@@ -79,7 +113,7 @@ export async function POST(req: NextRequest) {
                 // With nothing retrieved there is no document, so it says so
                 // rather than naming a knowledge base that was never queried.
                 explanation: answer.slice(0, 500) || 'RAG analysis pending',
-                source: sources[0]?.source || 'No regulatory source retrieved — RAG service did not respond',
+                source: firstSource,
             },
         ];
 
