@@ -376,7 +376,18 @@ export default function FarmerDashboard() {
           </button>
         </div>
 
-        <BatchTable rows={batches} />
+        {/* `loading` is set on every fetch but was never rendered, so the table
+            showed its "No batches to show." empty state during the request and
+            on every refetch. An empty list and a list still loading are
+            different facts, and only one of them is true here. */}
+        {loading ? (
+          <div className="glass-card py-12 flex items-center justify-center gap-2">
+            <span className="w-4 h-4 border-2 border-agro-green border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-500 font-medium">Loading batches…</span>
+          </div>
+        ) : (
+          <BatchTable rows={batches} />
+        )}
       </div>
 
       {/* QR Code Download Modal */}
@@ -394,6 +405,15 @@ export default function FarmerDashboard() {
             </div>
 
             <div className="p-3 bg-[#FAFAF7] rounded-xl border border-gray-200 flex flex-col items-center">
+              {/* `no-img-element` disabled deliberately. `qrDataUrl` is a
+                  `data:image/png;base64,…` string produced in the browser by the
+                  `qrcode` package — there is no URL for the Next.js image
+                  optimizer to fetch, resize or re-encode, so `next/image` would
+                  add a loader and a second decode pass for a lossless PNG that
+                  is already exactly the size it is displayed at. The rule exists
+                  to stop unoptimised JPEGs of remote photos; a base64 QR code is
+                  the case where it does not apply. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrModalData.qrDataUrl} alt="Batch QR Code" className="w-48 h-48 rounded-lg shadow-sm" />
               <p className="mt-2 text-xs font-mono font-bold text-[#16a34a]">{qrModalData.code}</p>
             </div>

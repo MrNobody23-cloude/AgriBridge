@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { loadBatchWithRelations } from '@/lib/db/repositories/batches';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -7,8 +7,8 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
  *
  * Division of labour: this file owns the database, the Python service owns
  * inference. The Python service has no database connection, so every value an
- * agent sees is read here through Prisma and passed explicitly. Two consequences
- * worth stating:
+ * agent sees is read here and passed explicitly. Two consequences worth
+ * stating:
  *
  *  - An agent cannot read a batch the caller was not authorised to read. There
  *    is no query to authorise, because the query happened here, under the
@@ -48,36 +48,30 @@ export interface AgentResult<T = Record<string, unknown>> {
     [key: string]: unknown;
 }
 
-const FULL_BATCH_INCLUDE = {
-    product: true,
-    certificates: true,
-    events: { orderBy: { timestamp: 'asc' as const } },
-    temperatureLogs: { orderBy: { timestamp: 'desc' as const }, take: 100 },
-    shipments: {
-        orderBy: { createdAt: 'desc' as const },
-        take: 1,
-        include: { complianceChecks: true },
-    },
-} as const;
-
-type BatchWithRelations = Awaited<
-    ReturnType<typeof prisma.batch.findFirst<{ include: typeof FULL_BATCH_INCLUDE }>>
->;
-
 /**
  * Read everything the six agents may see about a batch.
  *
  * Returns null when the batch does not exist, so callers can 404 rather than
  * scoring a batch of empty objects.
+ *
+ * The query itself moved into the repository as
+ * `loadBatchWithRelations(idOrCode, { temperatureLogLimit: 100, shipmentLimit: 1 })`.
+ * The ordering and limits that used to be spelled out in the `FULL_BATCH_INCLUDE`
+ * constant are now part of the repository call, which matters: the previous
+ * code cast the result to a derived Prisma type and the compiler could not
+ * check that the type and the query agreed. `loadBatchWithRelations` returns
+ * its own hand-written interface, so a mismatch in ordering or arity is a
+ * compile error rather than a wrong answer at runtime.
  */
 export async function buildAgentContext(
     batchIdOrCode: string,
     options: { pesticideResidueLevel?: number; remainingTransportTime?: number } = {}
 ): Promise<AgentBatchContext | null> {
-    const batch = (await prisma.batch.findFirst({
-        where: { OR: [{ id: batchIdOrCode }, { batchCode: batchIdOrCode }] },
-        include: FULL_BATCH_INCLUDE,
-    })) as BatchWithRelations;
+    const batch = await loadBatchWithRelations(batchIdOrCode, {
+        temperatureLogLimit: 100,
+        shipmentLimit: 1,
+        eventOrder: 'asc',
+    });
 
     if (!batch) return null;
 

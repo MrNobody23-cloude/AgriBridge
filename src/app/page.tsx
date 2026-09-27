@@ -38,7 +38,7 @@ export default function LandingPage() {
             <span>🌱</span> Built Specifically for Indian Agriculture
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight text-[#1a1a1a] tracking-tight">
-            India's Agricultural <br />
+            India&apos;s Agricultural <br />
             Supply Chain <br />
             <span className="text-[#16a34a]">Finally Has a Brain.</span>
           </h1>
@@ -210,7 +210,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 space-y-10">
           <div className="text-center max-w-xl mx-auto space-y-2">
             <h2 className="text-3xl font-extrabold text-[#1a1a1a] tracking-tight">Technology Pillars</h2>
-            <p className="text-sm text-gray-600 font-medium">Under the hood of India's most advanced agritech trust engine</p>
+            <p className="text-sm text-gray-600 font-medium">Under the hood of India&apos;s most advanced agritech trust engine</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

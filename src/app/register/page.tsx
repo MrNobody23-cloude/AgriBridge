@@ -51,7 +51,7 @@ export default function RegisterPage() {
                 return;
             }
             router.push('/login');
-        } catch (err) {
+        } catch {
             setError('An error occurred during registration');
         } finally {
             setLoading(false);
@@ -71,7 +71,7 @@ export default function RegisterPage() {
                     </div>
                     <h1 className="text-3xl font-extrabold tracking-tight mb-4 text-[#1a1a1a]">Join the Trust Network</h1>
                     <p className="text-gray-600 font-medium mb-12 text-sm leading-relaxed">
-                        Become part of India's most secure and transparent agricultural supply chain platform powered by blockchain and AI.
+                        Become part of India&apos;s most secure and transparent agricultural supply chain platform powered by blockchain and AI.
                     </p>
                 </div>
             </div>

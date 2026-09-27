@@ -1,12 +1,20 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuth, requirePermission } from '@/lib/auth';
+import {
+    listBatches,
+    createBatch,
+    createSupplyChainEvent,
+    nextSequence,
+} from '@/lib/db/repositories/batches';
+import { findUserByIdWithProfile } from '@/lib/db/repositories/users';
+import { findProductByNameInsensitive, createProduct, createCertificate } from '@/lib/db/repositories/catalog';
+import { requirePermission } from '@/lib/auth';
 import { createBatchSchema } from '@/lib/validators';
 import { generateBatchHash, registerBatchOnChain } from '@/lib/blockchain';
 import { calculateTrustScore } from '@/lib/services/trustScoreService';
 import { runSupervisorOrchestration } from '@/lib/services/agentService';
 import { successResponse, errorResponse } from '@/lib/response';
 import { createAuditLog } from '@/lib/auditLog';
+import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 // ─── GET /api/batches ─────────────────────────────────────────────────────────
 
@@ -22,40 +30,16 @@ export async function GET(req: NextRequest) {
         const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
         const offset = parseInt(searchParams.get('offset') || '0');
 
-        const where: Record<string, unknown> = {};
-
-        // FARMER can only see their own batches
-        if (user.role === 'FARMER') {
-            where.farmerId = user.id;
-        }
-
-        if (status) where.status = status;
-        if (query) {
-            where.OR = [
-                { batchCode: { contains: query, mode: 'insensitive' } },
-                { location: { contains: query, mode: 'insensitive' } },
-                { product: { name: { contains: query, mode: 'insensitive' } } },
-            ];
-        }
-
-        const [batches, total] = await Promise.all([
-            prisma.batch.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                take: limit,
-                skip: offset,
-                include: {
-                    product: true,
-                    farmer: { select: { id: true, name: true, email: true, farmerProfile: true } },
-                    certificates: { select: { id: true, certificateType: true, verificationStatus: true, expiryDate: true } },
-                    events: { orderBy: { timestamp: 'asc' } },
-                    fraudAlerts: { where: { status: { not: 'RESOLVED' } }, select: { id: true, fraudType: true, severity: true, status: true } },
-                    trustScoreDetails: true,
-                    _count: { select: { temperatureLogs: true } },
-                },
-            }),
-            prisma.batch.count({ where }),
-        ]);
+        // FARMER can only see their own batches. The product-name branch of the
+        // old `where.OR` is resolved inside the repository, since filtering on a
+        // related collection's field is a two-step query in Mongo.
+        const { batches, total } = await listBatches({
+            farmerId: user.role === 'FARMER' ? user.id : undefined,
+            status: status ?? undefined,
+            query: query ?? undefined,
+            limit,
+            offset,
+        });
 
         return successResponse({ batches, total, limit, offset });
     } catch (error: unknown) {
@@ -88,38 +72,36 @@ export async function POST(req: NextRequest) {
         }
 
         // Get the authenticated farmer (not the first farmer in DB)
-        const farmer = await prisma.user.findUnique({
-            where: { id: user.id },
-            include: { farmerProfile: true },
-        });
+        const farmer = await findUserByIdWithProfile(user.id);
         if (!farmer) {
             return errorResponse('Farmer account not found', 'USER_NOT_FOUND', 404);
         }
 
         // Find or create product
-        let product = await prisma.product.findFirst({
-            where: { name: { equals: validated.crop, mode: 'insensitive' } },
-        });
+        let product = await findProductByNameInsensitive(validated.crop);
         if (!product) {
-            product = await prisma.product.create({
-                data: {
-                    name: validated.crop,
-                    category: 'Agriculture',
-                    description: `${validated.crop} — registered on AgriBridge AI platform`,
-                },
+            product = await createProduct({
+                name: validated.crop,
+                category: 'Agriculture',
+                description: `${validated.crop} — registered on AgriBridge AI platform`,
             });
         }
 
         // Generate unique batch code: AGR-YYYY-ST-NNNNNN
+        //
+        // The sequence comes from an atomic counter rather than `count() + 1`.
+        // Two farmers registering in the same instant would read the same count
+        // and mint the same code, and the unique index would then reject the
+        // second write with an error that says nothing about the cause.
         const year = new Date().getFullYear();
         const stateCode = (farmer.farmerProfile?.state || 'IN').substring(0, 2).toUpperCase();
-        const count = await prisma.batch.count();
-        const batchCode = `AGR-${year}-${stateCode}-${String(count + 1).padStart(6, '0')}`;
+        const seq = await nextSequence('batch');
+        const batchCode = `AGR-${year}-${stateCode}-${String(seq).padStart(6, '0')}`;
 
         // Cryptographic SHA-256 hash
         const cryptographicHash = generateBatchHash({
             batchCode,
-            farmerId: farmer.id,
+            farmerId: farmer._id,
             crop: validated.crop,
             quantity: validated.quantity,
             harvestDate: validated.harvestDate,
@@ -134,83 +116,76 @@ export async function POST(req: NextRequest) {
         const chainRes = await registerBatchOnChain(batchCode, cryptographicHash);
 
         // Save batch to database
-        const newBatch = await prisma.batch.create({
-            data: {
-                batchCode,
-                farmerId: farmer.id,
-                productId: product.id,
-                variety: validated.variety,
-                quantity: validated.quantity,
-                unit: validated.unit || 'kg',
-                harvestDate,
-                location: validated.location,
-                destinationCountry: validated.destinationCountry,
-                status: 'Registered',
-                blockchainHash: cryptographicHash,
-                blockchainTransactionHash: chainRes.transactionHash,
-                blockchainMode: chainRes.mode,
-                trustScore: 0, // Will be calculated below
-            },
-            include: { product: true, farmer: { select: { id: true, name: true, email: true, farmerProfile: true } } },
+        const newBatch = await createBatch({
+            batchCode,
+            farmerId: farmer._id,
+            productId: product._id,
+            variety: validated.variety,
+            quantity: validated.quantity,
+            unit: validated.unit || 'kg',
+            harvestDate,
+            location: validated.location,
+            destinationCountry: validated.destinationCountry,
+            status: 'Registered',
+            blockchainHash: cryptographicHash,
+            blockchainTransactionHash: chainRes.transactionHash,
+            blockchainMode: chainRes.mode,
+            trustScore: 0, // Will be calculated below
         });
 
         // Record initial FARM_REGISTERED event
-        await prisma.supplyChainEvent.create({
-            data: {
-                batchId: newBatch.id,
-                eventType: 'FARM_REGISTERED',
-                actorId: farmer.id,
-                location: validated.location,
-                metadata: JSON.stringify({
-                    blockchainHash: cryptographicHash,
-                    blockchainMode: chainRes.mode,
-                    chainAnchored: chainRes.success,
-                    chainReason: chainRes.reason ?? null,
-                    quantity: validated.quantity,
-                    unit: validated.unit || 'kg',
-                }),
-                blockchainTransactionHash: chainRes.transactionHash,
-            },
+        await createSupplyChainEvent({
+            batchId: newBatch._id,
+            eventType: 'FARM_REGISTERED',
+            actorId: farmer._id,
+            location: validated.location,
+            metadata: JSON.stringify({
+                blockchainHash: cryptographicHash,
+                blockchainMode: chainRes.mode,
+                chainAnchored: chainRes.success,
+                chainReason: chainRes.reason ?? null,
+                quantity: validated.quantity,
+                unit: validated.unit || 'kg',
+            }),
+            blockchainTransactionHash: chainRes.transactionHash,
         });
 
         // If certificate details provided, create it
         if (validated.certificateUrl) {
-            await prisma.certificate.create({
-                data: {
-                    batchId: newBatch.id,
-                    certificateType: validated.certificateType || 'Phytosanitary Certificate',
-                    fileUrl: validated.certificateUrl,
-                    // The certificate document itself was never downloaded or
-                    // hashed here, so its content hash is unknown. The previous
-                    // code stored the *batch's* hash in this field, which is an
-                    // indexed column the fraud scanner uses to detect a
-                    // certificate reused across batches — copying the batch hash
-                    // made that check meaningless, and it would have collided
-                    // with the real batch-hash check. An empty string is honest
-                    // and simply never matches; the proper path is
-                    // POST /api/certificates/upload, which hashes the real file
-                    // and can verify it against IPFS.
-                    fileHash: '',
-                    issuer: validated.certIssuer || 'APEDA / FSSAI Authority',
-                    issueDate: new Date(),
-                    expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-                    verificationStatus: 'PENDING',
-                },
+            await createCertificate({
+                batchId: newBatch._id,
+                certificateType: validated.certificateType || 'Phytosanitary Certificate',
+                fileUrl: validated.certificateUrl,
+                // The certificate document itself was never downloaded or
+                // hashed here, so its content hash is unknown. The previous
+                // code stored the *batch's* hash in this field, which is an
+                // indexed column the fraud scanner uses to detect a
+                // certificate reused across batches — copying the batch hash
+                // made that check meaningless, and it would have collided
+                // with the real batch-hash check. An empty string is honest
+                // and simply never matches; the proper path is
+                // POST /api/certificates/upload, which hashes the real file
+                // and can verify it against IPFS.
+                fileHash: '',
+                issuer: validated.certIssuer || 'APEDA / FSSAI Authority',
+                issueDate: new Date(),
+                expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+                verificationStatus: 'PENDING',
             });
         }
 
         // Calculate trust score
-        const trustResult = await calculateTrustScore(newBatch.id);
+        const trustResult = await calculateTrustScore(newBatch._id);
 
         // Run AI Supervisor multi-agent orchestration (async, don't block response)
-        runSupervisorOrchestration(newBatch.id).catch(console.error);
+        runSupervisorOrchestration(newBatch._id).catch(console.error);
 
         // Audit log
         await createAuditLog({
             userId: user.id,
             action: 'BATCH_CREATED',
             resource: 'Batch',
-            resourceId: newBatch.id,
+            resourceId: newBatch._id,
             metadata: JSON.stringify({ batchCode, crop: validated.crop, quantity: validated.quantity }),
         });
 
@@ -223,8 +198,8 @@ export async function POST(req: NextRequest) {
             201
         );
     } catch (error: unknown) {
-        if ((error as any).name === 'ZodError') {
-            return errorResponse((error as any).errors[0]?.message || 'Validation failed', 'VALIDATION_ERROR', 400);
+        if (isZodError(error)) {
+            return errorResponse(firstValidationMessage(error), 'VALIDATION_ERROR', 400);
         }
         console.error('Create batch error:', error);
         return errorResponse('Failed to create crop batch', 'SERVER_ERROR', 500);

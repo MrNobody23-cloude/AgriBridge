@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { createAgentLog } from '@/lib/db/repositories/agents';
 
 export interface SpoilagePredictionResult {
     crop: string;
@@ -73,15 +73,13 @@ export async function predictSpoilage(
     };
 
     // Log in AI Agent Activity
-    await prisma.aiAgentLog.create({
-        data: {
-            agentName: 'Spoilage Prediction Agent',
-            task: `Spoilage Analysis for ${productName}`,
-            input: `Temp: ${temperature}°C, Transit Days: ${transitDays}`,
-            output: `Risk: ${spoilageRisk} (${Math.round(probSpoilage * 100)}% prob) | Remaining: ${remainingDays} days`,
-            confidence: 0.91,
-            status: 'COMPLETED',
-        },
+    await createAgentLog({
+        agentName: 'Spoilage Prediction Agent',
+        task: `Spoilage Analysis for ${productName}`,
+        input: `Temp: ${temperature}°C, Transit Days: ${transitDays}`,
+        output: `Risk: ${spoilageRisk} (${Math.round(probSpoilage * 100)}% prob) | Remaining: ${remainingDays} days`,
+        confidence: 0.91,
+        status: 'COMPLETED',
     });
 
     return result;

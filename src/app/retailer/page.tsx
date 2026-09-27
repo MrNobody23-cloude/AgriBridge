@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import TrustScoreGauge from '@/components/TrustScoreGauge';
 import RecentBatchCodes from '@/components/RecentBatchCodes';
+import type { ApiBatchDetail, ApiSpoilageResult } from '@/lib/api-types';
 
 interface Batch {
   id: string;
@@ -20,13 +21,13 @@ export default function RetailerDashboard() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [scanCode, setScanCode] = useState('');
-  const [scannedBatch, setScannedBatch] = useState<any>(null);
+  const [scannedBatch, setScannedBatch] = useState<ApiBatchDetail | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState('');
 
   // ML spoilage check
   const [spoilageLoading, setSpoilageLoading] = useState(false);
-  const [spoilageResult, setSpoilageResult] = useState<any>(null);
+  const [spoilageResult, setSpoilageResult] = useState<ApiSpoilageResult | null>(null);
 
   const fetchBatches = async () => {
     setLoading(true);
@@ -58,7 +59,7 @@ export default function RetailerDashboard() {
       } else {
         setScanError(json.error?.message || 'Batch not found');
       }
-    } catch (e) {
+    } catch {
       setScanError('Network error. Please try again.');
     } finally {
       setScanLoading(false);
@@ -66,13 +67,16 @@ export default function RetailerDashboard() {
   };
 
   const handleSpoilageCheck = async () => {
-    if (!scannedBatch?.batch) return;
+    // `scannedBatch` IS the batch — the detail response is flat, not wrapped in
+    // a `batch` key. This guard therefore tested a field that does not exist, so
+    // it always returned early and the spoilage check never ran.
+    if (!scannedBatch?.batchCode) return;
     setSpoilageLoading(true);
     try {
       const res = await fetch('/api/ml/spoilage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchId: scannedBatch.batch.batchCode }),
+        body: JSON.stringify({ batchId: scannedBatch.batchCode }),
       });
       const json = await res.json();
       if (json.success) setSpoilageResult(json.data);
@@ -95,6 +99,12 @@ export default function RetailerDashboard() {
     };
     return map[risk] || 'bg-gray-100 text-gray-700';
   };
+
+  /* The prediction is nested under `prediction`, not flat. The retailer page
+     read `spoilageResult.riskLevel` / `.remainingShelfLifeDays` — names that
+     exist nowhere on the response, so a successful check rendered as an empty
+     risk badge and "NaN days". These two are the only paths into the result. */
+  const prediction = spoilageResult?.prediction;
 
   return (
     <DashboardLayout title="Retailer Dashboard">
@@ -170,10 +180,10 @@ export default function RetailerDashboard() {
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Shelf-Life Prediction</p>
-            {spoilageResult ? (
+            {prediction ? (
               <>
                 <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
-                  {spoilageResult.remainingShelfLifeDays ?? spoilageResult.remainingDays ?? '—'}
+                  {prediction.estimatedRemainingDays ?? '—'}
                   <span className="text-sm font-bold text-gray-400 ml-1">days</span>
                 </p>
                 <span className="text-[11px] font-semibold text-purple-600 block mt-1">
@@ -227,13 +237,13 @@ export default function RetailerDashboard() {
           {scannedBatch && (
             <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-4 text-center">
               <div className="inline-block">
-                <TrustScoreGauge score={scannedBatch.trustDetails?.finalScore || scannedBatch.batch.trustScore} size={130} />
+                <TrustScoreGauge score={scannedBatch.trustScoreDetails?.finalScore ?? scannedBatch.trustScore ?? 0} size={130} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-[#1a1a1a]">{scannedBatch.batch.product?.name}</h3>
-                <p className="text-xs font-mono text-[#16a34a]">{scannedBatch.batch.batchCode}</p>
+                <h3 className="text-sm font-bold text-[#1a1a1a]">{scannedBatch.product?.name}</h3>
+                <p className="text-xs font-mono text-[#16a34a]">{scannedBatch.batchCode}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  by {scannedBatch.batch.farmer?.name} · {scannedBatch.batch.location}
+                  by {scannedBatch.farmer?.name} · {scannedBatch.location}
                 </p>
               </div>
               <button onClick={handleSpoilageCheck} disabled={spoilageLoading}
@@ -244,15 +254,15 @@ export default function RetailerDashboard() {
                 <div className="p-3 bg-[#FAFAF7] rounded-xl border border-gray-200 text-left space-y-1">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold text-[#1a1a1a]">Spoilage Risk</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${riskBadge(spoilageResult.riskLevel || spoilageResult.spoilageRisk)}`}>
-                      {spoilageResult.riskLevel || spoilageResult.spoilageRisk}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${riskBadge(prediction?.risk ?? 'UNKNOWN')}`}>
+                      {prediction?.risk ?? 'UNKNOWN'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-600">
-                    Shelf life remaining: <span className="font-bold text-[#1a1a1a]">{spoilageResult.remainingShelfLifeDays ?? spoilageResult.remainingDays} days</span>
+                    Shelf life remaining: <span className="font-bold text-[#1a1a1a]">{prediction?.estimatedRemainingDays ?? '—'} days</span>
                   </p>
-                  {spoilageResult.recommendation && (
-                    <p className="text-[11px] text-gray-500">{spoilageResult.recommendation}</p>
+                  {prediction?.recommendation && (
+                    <p className="text-[11px] text-gray-500">{prediction.recommendation}</p>
                   )}
                 </div>
               )}

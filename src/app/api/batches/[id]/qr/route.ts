@@ -1,7 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { optionalAuth } from '@/lib/auth';
-import { createBatchSchema } from '@/lib/validators';
+import { NextRequest } from 'next/server';
+import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
 import { successResponse, errorResponse } from '@/lib/response';
 import QRCode from 'qrcode';
 
@@ -15,10 +13,10 @@ export async function GET(
     const { id } = await params;
 
     try {
-        const batch = await prisma.batch.findFirst({
-            where: { OR: [{ id }, { batchCode: id }] },
-            select: { id: true, batchCode: true, trustScore: true, status: true },
-        });
+        // A QR code is a public verification entry point, so this route
+        // deliberately has no role check — the same batch id or batchCode works
+        // either way, exactly as it did under Prisma's `OR` lookup.
+        const batch = await findBatchByIdOrCode(id);
         if (!batch) return errorResponse(`Batch ${id} not found`, 'BATCH_NOT_FOUND', 404);
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -41,7 +39,7 @@ export async function GET(
         });
 
         return successResponse({
-            batchId: batch.id,
+            batchId: batch._id,
             batchCode: batch.batchCode,
             verifyUrl,
             qrDataUrl,

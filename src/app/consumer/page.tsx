@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import TrustScoreGauge from '@/components/TrustScoreGauge';
+import type { ApiBatchDetail } from '@/lib/api-types';
 import RecentBatchCodes from '@/components/RecentBatchCodes';
 import Link from 'next/link';
 
@@ -12,7 +13,7 @@ export default function ConsumerPage() {
   // so a consumer who typed nothing still got an answer about a specific
   // batch — one they never chose, and one that may not exist.
   const [searchCode, setSearchCode] = useState('');
-  const [batchData, setBatchData] = useState<any>(null);
+  const [batchData, setBatchData] = useState<ApiBatchDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,7 +41,7 @@ export default function ConsumerPage() {
         setError(json.error?.message || 'Batch code not found in blockchain registry');
         setBatchData(null);
       }
-    } catch (e) {
+    } catch {
       setError('Connection failed. Please check network.');
     } finally {
       setLoading(false);
@@ -79,7 +80,7 @@ export default function ConsumerPage() {
       } else {
         setChatMessages([...newMsgs, { sender: 'bot', text: 'Apologies, I encountered an issue retrieving verified answers.' }]);
       }
-    } catch (e) {
+    } catch {
       setChatMessages([...newMsgs, { sender: 'bot', text: 'Network connection issue.' }]);
     } finally {
       setChatting(false);
@@ -140,7 +141,7 @@ export default function ConsumerPage() {
           {/* Left Column: Batch Trust Score & Origin */}
           <div className="lg:col-span-1 bg-white rounded-2xl p-6 border border-gray-200 shadow-xs space-y-5 text-center">
             <div className="inline-block p-2 bg-green-50 rounded-2xl border border-green-100">
-              <TrustScoreGauge score={batchData.trustDetails?.finalScore || batchData.batch.trustScore} size={150} />
+              <TrustScoreGauge score={batchData.trustScoreDetails?.finalScore ?? batchData.trustScore ?? 0} size={150} />
             </div>
 
             <div>
@@ -178,18 +179,18 @@ export default function ConsumerPage() {
                   </>
                 );
               })()}
-              <h3 className="text-lg font-bold text-[#1a1a1a] mt-2">{batchData.batch.product?.name}</h3>
-              <p className="text-xs text-gray-500 font-mono">Batch Code: {batchData.batch.batchCode}</p>
+              <h3 className="text-lg font-bold text-[#1a1a1a] mt-2">{batchData.product?.name}</h3>
+              <p className="text-xs text-gray-500 font-mono">Batch Code: {batchData.batchCode}</p>
             </div>
 
             <div className="p-3 bg-[#FAFAF7] rounded-xl border border-gray-200 text-left text-xs space-y-1.5 font-medium">
-              <p><span className="text-gray-400">Farmer:</span> <span className="font-bold text-[#1a1a1a]">{batchData.batch.farmer?.name}</span></p>
-              <p><span className="text-gray-400">Origin:</span> <span className="font-bold text-[#1a1a1a]">{batchData.batch.location}</span></p>
-              <p><span className="text-gray-400">Harvest Date:</span> <span className="font-bold text-[#1a1a1a]">{new Date(batchData.batch.harvestDate).toLocaleDateString()}</span></p>
+              <p><span className="text-gray-400">Farmer:</span> <span className="font-bold text-[#1a1a1a]">{batchData.farmer?.name}</span></p>
+              <p><span className="text-gray-400">Origin:</span> <span className="font-bold text-[#1a1a1a]">{batchData.location}</span></p>
+              <p><span className="text-gray-400">Harvest Date:</span> <span className="font-bold text-[#1a1a1a]">{new Date(batchData.harvestDate).toLocaleDateString()}</span></p>
             </div>
 
             <Link
-              href={`/verify/${batchData.batch.batchCode}`}
+              href={`/verify/${batchData.batchCode}`}
               target="_blank"
               className="block w-full py-2.5 bg-gray-900 text-white text-xs font-bold rounded-xl hover:bg-black text-center"
             >
@@ -208,7 +209,7 @@ export default function ConsumerPage() {
                   {/* Claimed the answers were "grounded in verified
                       blockchain audit records" for every batch, including one
                       whose chain status is NOT_CONFIGURED or UNREACHABLE. */}
-                  Answers are drawn from the ledger record for {batchData.batch.batchCode}
+                  Answers are drawn from the ledger record for {batchData.batchCode}
                   {batchData.chainVerification?.status === 'VERIFIED'
                     ? ', which is anchored on-chain.'
                     : '.'}

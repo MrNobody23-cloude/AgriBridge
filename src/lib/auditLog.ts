@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { writeAuditLog } from '@/lib/db/repositories/batches';
 
 interface AuditLogInput {
     userId?: string;
@@ -21,16 +21,14 @@ export async function createAuditLog(input: AuditLogInput): Promise<void> {
         const metadata = input.metadata
             ?? (input.details ? JSON.stringify(input.details) : undefined);
 
-        await prisma.auditLog.create({
-            data: {
-                userId:     input.userId,
-                action:     input.action,
-                resource:   input.resource,
-                resourceId: input.resourceId,
-                metadata,
-                ipAddress:  input.ipAddress,
-                userAgent:  input.userAgent,
-            },
+        await writeAuditLog({
+            userId:     input.userId ?? null,
+            action:     input.action,
+            resource:   input.resource,
+            resourceId: input.resourceId ?? null,
+            metadata:   metadata ?? null,
+            ipAddress:  input.ipAddress ?? null,
+            userAgent:  input.userAgent ?? null,
         });
     } catch (error) {
         console.error('[AuditLog] Failed to write audit log:', error);

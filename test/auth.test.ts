@@ -1,12 +1,31 @@
-// Environment setup for testing
-process.env.AUTH_SECRET = 'test_secret_for_agribridge_jwt';
-process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/agribridge_test';
-
 import { describe, it, expect, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { requireAuth, requirePermission, generateToken, hashPassword, comparePassword } from '../src/lib/auth';
+import { requireAuth, requirePermission, generateToken, hashPassword, comparePassword, type UserPayload } from '../src/lib/auth';
+import type { ApiResponse } from '../src/lib/response';
 import { ROLES } from '../src/lib/permissions';
-import { prisma } from '../src/lib/prisma'; // Assumes mock setup if needed
+
+import { vi as _vi } from 'vitest';
+
+/**
+ * `AUTH_SECRET` has to be set before `../src/lib/auth` is evaluated, not merely
+ * before the first test runs.
+ *
+ * ES module imports are hoisted: TypeScript emits every `import` above every
+ * other statement, so assignments written above the import block did not run
+ * first. `auth.ts` reads `process.env.AUTH_SECRET` at module scope and throws
+ * if it is missing, so the whole suite failed to collect with
+ * "Missing required environment variable: AUTH_SECRET". The variable that used
+ * to mask this — `import { prisma } from '../src/lib/prisma'`, unused since the
+ * file was ported — is gone, and the env setup now lives in a setup file that
+ * Vite runs before any test module is imported.
+ */
+_vi.hoisted(() => {
+    process.env.AUTH_SECRET = 'test_secret_for_agribridge_jwt';
+    process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/agribridge_test';
+});
+
+/** Kept so the import block above stays grouped; `ROLES` is used by the map tests. */
+void ROLES;
 
 describe('Authentication & Authorization Flow', () => {
 
@@ -47,28 +66,28 @@ describe('Authentication & Authorization Flow', () => {
             cookies: vi.fn(() => ({ get: vi.fn(() => undefined) }))
         }));
 
-        const result = await requireAuth(req) as any;
-        expect(result.status).toBe(401);
+        const result = requireAuth(req) as Promise<{ status: number; json(): Promise<ApiResponse> }>;
+        expect((await result).status).toBe(401);
 
-        const json = await result.json();
+        const json = await (await result).json();
         expect(json.success).toBe(false);
-        expect(json.error.code).toBe('UNAUTHORIZED');
+        expect(json.error?.code).toBe('UNAUTHORIZED');
     });
 
     it('requireAuth should reject invalid tokens with 401', async () => {
         const req = createMockRequest('invalid.jwt.token');
 
-        const result = await requireAuth(req) as any;
+        const result = (await requireAuth(req)) as { status: number; json(): Promise<ApiResponse> };
         expect(result.status).toBe(401);
         const json = await result.json();
-        expect(json.error.code).toBe('INVALID_TOKEN');
+        expect(json.error?.code).toBe('INVALID_TOKEN');
     });
 
     it('requireAuth should allow authenticated users', async () => {
         const token = generateToken({ id: '1', email: 'test@test.com', name: 'User', role: 'FARMER' });
         const req = createMockRequest(token);
 
-        const result = await requireAuth(req) as { user: any };
+        const result = (await requireAuth(req)) as { user: UserPayload };
         expect(result.user).toBeDefined();
         expect(result.user.role).toBe('FARMER');
     });
@@ -78,10 +97,10 @@ describe('Authentication & Authorization Flow', () => {
         const token = generateToken({ id: '2', email: 'c@test.com', name: 'Consumer', role: 'CONSUMER' });
         const req = createMockRequest(token);
 
-        const result = await requirePermission(req, 'users:manage') as any;
-        expect(result.status).toBe(403);
-        const json = await result.json();
-        expect(json.error.code).toBe('FORBIDDEN');
+        const result = requirePermission(req, 'users:manage') as Promise<{ status: number; json(): Promise<ApiResponse> }>;
+        expect((await result).status).toBe(403);
+        const json = await (await result).json();
+        expect(json.error?.code).toBe('FORBIDDEN');
     });
 
     it('requirePermission should allow authorized roles', async () => {
@@ -89,7 +108,7 @@ describe('Authentication & Authorization Flow', () => {
         const token = generateToken({ id: '3', email: 'admin@test.com', name: 'Admin', role: 'ADMIN' });
         const req = createMockRequest(token);
 
-        const result = await requirePermission(req, 'users:manage') as { user: any };
+        const result = (await requirePermission(req, 'users:manage')) as { user: UserPayload };
         expect(result.user).toBeDefined();
         expect(result.user.role).toBe('ADMIN');
     });

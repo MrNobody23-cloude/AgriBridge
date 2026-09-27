@@ -363,7 +363,9 @@ export default function ExporterDashboard() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-base font-bold text-[#1a1a1a]">Export Shipment Ledger</h3>
-          <span className="text-xs font-medium text-gray-500">Showing {shipments.length} shipments</span>
+          <span className="text-xs font-medium text-gray-500">
+            {loading ? 'Loading shipments…' : `Showing ${shipments.length} shipments`}
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-[#1a1a1a]">

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { loadBatchWithRelations } from '@/lib/db/repositories/batches';
+import { createAgentLog } from '@/lib/db/repositories/agents';
 import { requireAuth } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 
@@ -20,19 +21,17 @@ export async function POST(req: NextRequest) {
             return errorResponse('Query too long (max 500 chars)', 'VALIDATION_ERROR', 400);
         }
 
-        // Fetch full batch data to ground the AI answer
-        const batch = await prisma.batch.findFirst({
-            where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-            include: {
-                product: true,
-                farmer: { select: { name: true, farmerProfile: true } },
-                events: { orderBy: { timestamp: 'asc' } },
-                certificates: true,
-                trustScoreDetails: true,
-                temperatureLogs: { orderBy: { timestamp: 'desc' }, take: 20 },
-                shipments: { include: { complianceChecks: true } },
-                fraudAlerts: { where: { status: { not: 'RESOLVED' } } },
-            },
+        // Fetch full batch data to ground the AI answer. Events oldest first,
+        // the 20 most recent readings, and only *unresolved* fraud alerts — a
+        // resolved alert is history, and counting it as a live problem is the
+        // difference between an accurate answer and a needlessly alarming one.
+        const batch = await loadBatchWithRelations(batchId, {
+            eventOrder: 'asc',
+            temperatureLogLimit: 20,
+            // No `take` on shipments here: every shipment with its compliance
+            // checks is part of what the exporter is attesting to.
+            shipmentLimit: 0,
+            excludeResolvedFraudAlerts: true,
         });
 
         if (!batch) {
@@ -48,15 +47,18 @@ export async function POST(req: NextRequest) {
         const { verifyBatchOnChain } = await import('@/lib/blockchain');
         const chainV = await verifyBatchOnChain(batch.batchCode, batch.blockchainHash);
 
+        const productName = batch.product?.name ?? 'unknown product';
+        const farmerName = batch.farmer?.name ?? 'unknown';
+
         const batchContext = {
             batchCode: batch.batchCode,
-            product: batch.product.name,
+            product: productName,
             origin: batch.location,
             harvestDate: batch.harvestDate,
             status: batch.status,
-            farmerName: batch.farmer.name,
-            farmName: batch.farmer.farmerProfile?.farmName,
-            farmLocation: batch.farmer.farmerProfile?.location,
+            farmerName,
+            farmName: batch.farmer?.farmerProfile?.farmName,
+            farmLocation: batch.farmer?.farmerProfile?.location,
             blockchainVerified: chainV.status === 'VERIFIED',
             blockchainStatus: chainV.status,
             certificatesCount: batch.certificates.length,
@@ -78,35 +80,33 @@ export async function POST(req: NextRequest) {
             if (res.ok) {
                 aiResponse = await res.json();
             }
-        } catch (err: any) {
-            console.warn('AI service unavailable for consumer chat:', err.message);
+        } catch (err: unknown) {
+            console.warn('AI service unavailable for consumer chat:', err instanceof Error ? err.message : String(err));
         }
 
         // Log interaction
-        await prisma.aiAgentLog.create({
-            data: {
-                agentName: 'Consumer Trust Agent',
-                agentType: 'consumer',
-                task: `Answer consumer query for batch ${batch.batchCode}`,
-                input: query,
-                output: String(aiResponse.answer || 'AI service unavailable'),
-                // 0 when the service did not answer. It previously defaulted to
-                // 0.5, recording mid-confidence in a run that produced nothing.
-                confidence: Number(aiResponse.confidence || 0),
-                status: 'ANSWERED',
-                toolsUsed: JSON.stringify(aiResponse.toolsUsed || []),
-            },
+        await createAgentLog({
+            agentName: 'Consumer Trust Agent',
+            agentType: 'consumer',
+            task: `Answer consumer query for batch ${batch.batchCode}`,
+            input: query,
+            output: String(aiResponse.answer || 'AI service unavailable'),
+            // 0 when the service did not answer. It previously defaulted to
+            // 0.5, recording mid-confidence in a run that produced nothing.
+            confidence: Number(aiResponse.confidence || 0),
+            status: 'ANSWERED',
+            toolsUsed: JSON.stringify(aiResponse.toolsUsed || []),
         });
 
         return successResponse({
-            answer: aiResponse.answer || `Batch ${batch.batchCode} (${batch.product.name}) has been verified. Trust score: ${batch.trustScore}/100. Blockchain status: ${chainV.status}.`,
+            answer: aiResponse.answer || `Batch ${batch.batchCode} (${productName}) has been verified. Trust score: ${batch.trustScore}/100. Blockchain status: ${chainV.status}.`,
             evidence: aiResponse.evidence || [],
             sources: aiResponse.sources || [],
             confidence: aiResponse.confidence || 0,
             toolsUsed: aiResponse.toolsUsed || ['database_lookup', 'blockchain_verify'],
             batchSummary: {
                 batchCode: batch.batchCode,
-                product: batch.product.name,
+                product: productName,
                 origin: batch.location,
                 trustScore: batch.trustScore,
                 blockchainVerified: chainV.status === 'VERIFIED',
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
             },
             batchFound: true,
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('Consumer chat error:', err);
         return errorResponse('Failed to process consumer query', 'SERVER_ERROR', 500);
     }

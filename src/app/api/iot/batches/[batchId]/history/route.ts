@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
+import { findProductById } from '@/lib/db/repositories/catalog';
+import { listTemperatureLogs } from '@/lib/db/repositories/iot';
 import { requirePermission } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 
@@ -16,16 +18,20 @@ export async function GET(
     const { batchId } = await params;
 
     try {
-        const batch = await prisma.batch.findFirst({
-            where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-            select: { id: true, batchCode: true, product: { select: { name: true } } },
-        });
+        const batch = await findBatchByIdOrCode(batchId);
         if (!batch) return errorResponse(`Batch ${batchId} not found`, 'BATCH_NOT_FOUND', 404);
 
-        const readings = await prisma.temperatureLog.findMany({
-            where: { batchId: batch.id },
-            orderBy: { timestamp: 'asc' },
-        });
+        // Prisma selected only the product *name* through the relation. MongoDB
+        // has no joins, so the product is fetched and reduced to the same shape —
+        // a wider object here would change what the consumer-facing payload
+        // contains, not just how it is nested.
+        const product = await findProductById(batch.productId);
+        const productName = product ? { name: product.name } : null;
+
+        // Oldest first, and unbounded: the summary below divides by the reading
+        // count, so a capped page would report a percentage computed over a
+        // subset of the trace.
+        const readings = await listTemperatureLogs({ batchId: batch._id, order: 'asc' });
 
         const temps = readings.map((r) => r.temperature);
         const humidities = readings.filter((r) => r.humidity !== null).map((r) => r.humidity as number);
@@ -48,7 +54,7 @@ export async function GET(
             } : null,
         };
 
-        return successResponse({ batch: { id: batch.id, batchCode: batch.batchCode, product: batch.product }, readings, summary });
+        return successResponse({ batch: { id: batch._id, batchCode: batch.batchCode, product: productName }, readings, summary });
     } catch (error: unknown) {
         console.error('IoT history error:', error);
         return errorResponse('Failed to retrieve cold chain history', 'FETCH_ERROR', 500);

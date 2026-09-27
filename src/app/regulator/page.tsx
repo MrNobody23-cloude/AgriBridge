@@ -157,7 +157,15 @@ export default function RegulatorDashboard() {
 
       {/* Alert List Cards */}
       <div className="space-y-4">
-        {alerts.map((alert: any) => (
+        {/* As on the farmer page: `loading` was tracked but never rendered, so
+            a request in flight looked identical to a genuinely empty queue. */}
+        {loading && alerts.length === 0 ? (
+          <div className="bg-white rounded-xl py-12 flex items-center justify-center gap-2 border border-gray-200">
+            <span className="w-4 h-4 border-2 border-agro-green border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-500 font-medium">Loading fraud queue…</span>
+          </div>
+        ) : (
+        alerts.map((alert: any) => (
           <div key={alert.id} className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -205,7 +213,8 @@ export default function RegulatorDashboard() {
               </button>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
     </DashboardLayout>
   );

@@ -1,4 +1,7 @@
-import { prisma } from '@/lib/prisma';
+import { loadBatchWithRelations, updateBatch } from '@/lib/db/repositories/batches';
+import { findDuplicateCertificate } from '@/lib/db/repositories/catalog';
+import { createFraudAlert } from '@/lib/db/repositories/shipments';
+import { createAgentLog } from '@/lib/db/repositories/agents';
 
 export interface FraudScanResult {
     batchId?: string;
@@ -16,26 +19,24 @@ export interface FraudScanResult {
 export async function runFraudScan(batchId: string, shipmentId?: string): Promise<FraudScanResult[]> {
     const results: FraudScanResult[] = [];
 
-    const batch = await prisma.batch.findFirst({
-        where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-        include: { certificates: true, events: true, shipments: true, temperatureLogs: true },
+    // Every rule below reads certificates, events, shipments and readings, so
+    // the batch is loaded once with all four. No limit is applied to the
+    // readings: Rule 3 flags on *any* reading outside the band, and scanning
+    // only the most recent 100 would let an older breach go unflagged.
+    const batch = await loadBatchWithRelations(batchId, {
+        temperatureLogLimit: 0,
+        shipmentLimit: 0,
     });
 
     if (!batch) return results;
 
     // Rule 1: Duplicate Certificate Hash Scan
     for (const cert of batch.certificates) {
-        const duplicateCert = await prisma.certificate.findFirst({
-            where: {
-                fileHash: cert.fileHash,
-                batchId: { not: batch.id },
-            },
-            include: { batch: true },
-        });
+        const duplicateCert = await findDuplicateCertificate(cert.fileHash, batch._id);
 
         if (duplicateCert) {
             const alert = {
-                batchId: batch.id,
+                batchId: batch._id,
                 shipmentId,
                 fraudType: 'DUPLICATE_CERTIFICATE',
                 severity: 'CRITICAL' as const,
@@ -52,29 +53,24 @@ export async function runFraudScan(batchId: string, shipmentId?: string): Promis
             results.push(alert);
 
             // Create Fraud Alert in DB if not already exists
-            await prisma.fraudAlert.create({
-                data: {
-                    batchId: batch.id,
-                    shipmentId,
-                    fraudType: alert.fraudType,
-                    severity: alert.severity,
-                    description: alert.description,
-                    confidence: alert.confidence,
-                    status: 'OPEN',
-                },
+            await createFraudAlert({
+                batchId: batch._id,
+                shipmentId: shipmentId ?? null,
+                fraudType: alert.fraudType,
+                severity: alert.severity,
+                description: alert.description,
+                confidence: alert.confidence,
+                status: 'OPEN',
             });
 
             // Update batch status to Flagged
-            await prisma.batch.update({
-                where: { id: batch.id },
-                data: { status: 'Flagged' },
-            });
+            await updateBatch(batch._id, { status: 'Flagged' });
         }
 
         // Rule 2: Expired Certificate Check
         if (new Date(cert.expiryDate) < new Date()) {
             const alert = {
-                batchId: batch.id,
+                batchId: batch._id,
                 shipmentId,
                 fraudType: 'EXPIRED_CERTIFICATE',
                 severity: 'HIGH' as const,
@@ -86,16 +82,14 @@ export async function runFraudScan(batchId: string, shipmentId?: string): Promis
             };
             results.push(alert);
 
-            await prisma.fraudAlert.create({
-                data: {
-                    batchId: batch.id,
-                    shipmentId,
-                    fraudType: alert.fraudType,
-                    severity: alert.severity,
-                    description: alert.description,
-                    confidence: alert.confidence,
-                    status: 'OPEN',
-                },
+            await createFraudAlert({
+                batchId: batch._id,
+                shipmentId: shipmentId ?? null,
+                fraudType: alert.fraudType,
+                severity: alert.severity,
+                description: alert.description,
+                confidence: alert.confidence,
+                status: 'OPEN',
             });
         }
     }
@@ -105,7 +99,7 @@ export async function runFraudScan(batchId: string, shipmentId?: string): Promis
     if (tempBreaches.length > 0) {
         const maxTemp = Math.max(...tempBreaches.map((t) => t.temperature));
         const alert = {
-            batchId: batch.id,
+            batchId: batch._id,
             shipmentId,
             fraudType: 'TEMP_BREACH',
             severity: 'HIGH' as const,
@@ -118,32 +112,28 @@ export async function runFraudScan(batchId: string, shipmentId?: string): Promis
         };
         results.push(alert);
 
-        await prisma.fraudAlert.create({
-            data: {
-                batchId: batch.id,
-                shipmentId,
-                fraudType: alert.fraudType,
-                severity: alert.severity,
-                description: alert.description,
-                confidence: alert.confidence,
-                status: 'OPEN',
-            },
+        await createFraudAlert({
+            batchId: batch._id,
+            shipmentId: shipmentId ?? null,
+            fraudType: alert.fraudType,
+            severity: alert.severity,
+            description: alert.description,
+            confidence: alert.confidence,
+            status: 'OPEN',
         });
     }
 
     // Log AI Agent Scan Activity
-    await prisma.aiAgentLog.create({
-        data: {
-            agentName: 'Fraud Detection Agent',
-            task: `Fraud Scan on Batch ${batch.batchCode}`,
-            input: `Batch ${batch.batchCode} with ${batch.certificates.length} certificates and ${batch.events.length} events`,
-            output: results.length > 0 ? `FLAGGED: ${results.length} anomaly/fraud signature(s) detected` : 'PASSED: Zero fraud signatures detected',
-            // How strongly this agent asserts depends only on whether the scan
-            // found something, which is a count. It is not a probability that
-            // the batch is fraudulent.
-            confidence: 1,
-            status: results.length > 0 ? 'FLAGGED' : 'PASSED',
-        },
+    await createAgentLog({
+        agentName: 'Fraud Detection Agent',
+        task: `Fraud Scan on Batch ${batch.batchCode}`,
+        input: `Batch ${batch.batchCode} with ${batch.certificates.length} certificates and ${batch.events.length} events`,
+        output: results.length > 0 ? `FLAGGED: ${results.length} anomaly/fraud signature(s) detected` : 'PASSED: Zero fraud signatures detected',
+        // How strongly this agent asserts depends only on whether the scan
+        // found something, which is a count. It is not a probability that
+        // the batch is fraudulent.
+        confidence: 1,
+        status: results.length > 0 ? 'FLAGGED' : 'PASSED',
     });
 
     return results;

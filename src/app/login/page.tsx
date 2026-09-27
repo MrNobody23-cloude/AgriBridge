@@ -30,7 +30,7 @@ export default function LoginPage() {
             const userRole = data.data.user.role.toLowerCase();
             router.push(`/${userRole}`);
             router.refresh();
-        } catch (err) {
+        } catch {
             setError('An error occurred during login');
         } finally {
             setLoading(false);
@@ -152,7 +152,7 @@ export default function LoginPage() {
                     </form>
 
                     <div className="mt-8 text-center text-sm font-medium text-gray-600 border-t border-gray-200 pt-6">
-                        Don't have an account?{' '}
+                        Don&apos;t have an account?{' '}
                         <Link href="/register" className="font-bold text-agro-green hover:text-green-800 transition-colors">
                             Create account
                         </Link>

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { requireAuth, optionalAuth } from '@/lib/auth';
+import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
+import { createTemperatureLog, listTemperatureLogs } from '@/lib/db/repositories/iot';
+import { requireAuth } from '@/lib/auth';
 import { sensorReadingSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
-import { createAuditLog } from '@/lib/auditLog';
 import { runFraudScan } from '@/lib/services/fraudDetectionService';
 import { calculateTrustScore } from '@/lib/services/trustScoreService';
+import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 // ─── POST /api/iot/readings ────────────────────────────────────────────────────
 // Ingest a sensor reading from a real ESP32 device or simulator.
@@ -30,29 +31,25 @@ export async function POST(req: NextRequest) {
 
             // Validate batch exists
             if (validated.batchId) {
-                const batch = await prisma.batch.findFirst({
-                    where: { OR: [{ id: validated.batchId }, { batchCode: validated.batchId }] },
-                });
+                const batch = await findBatchByIdOrCode(validated.batchId);
                 if (!batch) {
                     return errorResponse(`Batch ${validated.batchId} not found`, 'BATCH_NOT_FOUND', 404);
                 }
-                validated.batchId = batch.id; // normalise to UUID
+                validated.batchId = batch._id; // normalise to the stored id
             }
 
-            const log = await prisma.temperatureLog.create({
-                data: {
-                    batchId: validated.batchId,
-                    shipmentId: validated.shipmentId,
-                    sensorId: validated.sensorId,
-                    temperature: validated.temperature,
-                    humidity: validated.humidity,
-                    location: validated.location,
-                    latitude: validated.latitude,
-                    longitude: validated.longitude,
-                    batteryLevel: validated.batteryLevel,
-                    isSimulated: validated.isSimulated ?? false,
-                    timestamp: validated.timestamp ? new Date(validated.timestamp) : new Date(),
-                },
+            const log = await createTemperatureLog({
+                batchId: validated.batchId,
+                shipmentId: validated.shipmentId,
+                sensorId: validated.sensorId,
+                temperature: validated.temperature,
+                humidity: validated.humidity,
+                location: validated.location,
+                latitude: validated.latitude,
+                longitude: validated.longitude,
+                batteryLevel: validated.batteryLevel,
+                isSimulated: validated.isSimulated ?? false,
+                timestamp: validated.timestamp ? new Date(validated.timestamp) : new Date(),
             });
 
             // Alert if temperature is out of safe range
@@ -69,8 +66,8 @@ export async function POST(req: NextRequest) {
 
         return successResponse({ created: created.length, readings: created }, 201);
     } catch (error: unknown) {
-        if ((error as any).name === 'ZodError') {
-            return errorResponse((error as any).errors[0]?.message || 'Validation failed', 'VALIDATION_ERROR', 400);
+        if (isZodError(error)) {
+            return errorResponse(firstValidationMessage(error), 'VALIDATION_ERROR', 400);
         }
         console.error('IoT reading error:', error);
         return errorResponse('Failed to ingest sensor reading', 'SERVER_ERROR', 500);
@@ -91,19 +88,20 @@ export async function GET(req: NextRequest) {
         const sensorId = searchParams.get('sensorId');
         const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500);
 
-        const where: Record<string, unknown> = {};
+        // Accept a batchCode or the stored id; the repository always filters on
+        // the stored id, so an unrecognised code yields no readings rather than
+        // a query that could match something unintended.
+        let resolvedBatchId: string | undefined;
         if (batchId) {
-            // Accept batchCode or UUID
-            const batch = await prisma.batch.findFirst({ where: { OR: [{ id: batchId }, { batchCode: batchId }] } });
-            if (batch) where.batchId = batch.id;
+            const batch = await findBatchByIdOrCode(batchId);
+            resolvedBatchId = batch?._id;
         }
-        if (shipmentId) where.shipmentId = shipmentId;
-        if (sensorId) where.sensorId = sensorId;
 
-        const readings = await prisma.temperatureLog.findMany({
-            where,
-            orderBy: { timestamp: 'desc' },
-            take: limit,
+        const readings = await listTemperatureLogs({
+            batchId: resolvedBatchId,
+            shipmentId: shipmentId ?? undefined,
+            sensorId: sensorId ?? undefined,
+            limit,
         });
 
         // Compute summary stats

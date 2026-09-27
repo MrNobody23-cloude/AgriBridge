@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { TOKEN_NAME } from '@/lib/auth';
 import { successResponse } from '@/lib/response';
 

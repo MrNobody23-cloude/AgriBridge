@@ -1,12 +1,15 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { prisma } from '@/lib/prisma';
+import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
+import { findDuplicateCertificate, createCertificate } from '@/lib/db/repositories/catalog';
+import { createFraudAlert } from '@/lib/db/repositories/shipments';
 import { certificateUploadSchema } from '@/lib/validators';
 import { runFraudScan } from '@/lib/services/fraudDetectionService';
 import { calculateTrustScore } from '@/lib/services/trustScoreService';
 import { successResponse, errorResponse } from '@/lib/response';
 import { requireAuth } from '@/lib/auth';
 import { createAuditLog } from '@/lib/auditLog';
+import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 const PINATA_GATEWAY = process.env.PINATA_GATEWAY_URL || 'https://gateway.pinata.cloud';
@@ -116,38 +119,36 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const validated = certificateUploadSchema.parse(body);
 
-        // Verify the batch exists and the uploader is authorized
-        const batch = await prisma.batch.findFirst({
-            where: { OR: [{ id: validated.batchId }, { batchCode: validated.batchId }] },
-            include: { farmer: { select: { id: true } } },
-        });
+        // Verify the batch exists and the uploader is authorized. Only
+        // `farmerId` is read from the batch — Prisma's `farmer: { select: { id } }`
+        // was one extra join for a single foreign key.
+        const batch = await findBatchByIdOrCode(validated.batchId);
 
         if (!batch) {
             return errorResponse('Batch not found', 'BATCH_NOT_FOUND', 404);
         }
 
         // Only the batch owner, exporters, regulators, and admins can upload certificates
-        const isOwner = batch.farmer.id === session.user.id;
+        const isOwner = batch.farmerId === session.user.id;
         const isPrivileged = ['EXPORTER', 'REGULATOR', 'ADMIN'].includes(session.user.role);
         if (!isOwner && !isPrivileged) {
             return errorResponse('Not authorized to upload certificates for this batch', 'FORBIDDEN', 403);
         }
 
         // ── 1. Duplicate SHA-256 Hash Detection ─────────────────────────────────
-        const existingCert = await prisma.certificate.findFirst({
-            where: { fileHash: validated.fileHash },
-            include: { batch: { select: { batchCode: true } } },
-        });
+        // The repository excludes this batch, so a non-null result is a match on
+        // a *different* batch — which is the fraud signal, exactly as before.
+        const duplicate = await findDuplicateCertificate(validated.fileHash, batch._id);
 
         let verificationStatus = 'VERIFIED';
         let duplicateDetected = false;
         let fraudReason = '';
 
-        if (existingCert && existingCert.batchId !== batch.id) {
+        if (duplicate) {
             // Hash collision across DIFFERENT batches → definite fraud signal
             verificationStatus = 'SUSPICIOUS';
             duplicateDetected = true;
-            fraudReason = `SHA-256 hash collision: file hash matches certificate on batch ${existingCert.batch.batchCode}.`;
+            fraudReason = `SHA-256 hash collision: file hash matches certificate on batch ${duplicate.batch.batchCode}.`;
         }
 
         // ── 2. IPFS Pin (if file content provided) ──────────────────────────────
@@ -187,47 +188,43 @@ export async function POST(req: NextRequest) {
         }
 
         // ── 4. Persist Certificate ───────────────────────────────────────────────
-        const certificate = await prisma.certificate.create({
-            data: {
-                batchId: batch.id,
-                certificateType: validated.certificateType,
-                fileUrl: fileUrl || validated.fileUrl || '',
-                fileHash: validated.fileHash,
-                ipfsHash: ipfsHash,
-                issuer: validated.issuer,
-                issueDate: new Date(),
-                expiryDate: new Date(validated.expiryDate),
-                verificationStatus,
-            },
+        const certificate = await createCertificate({
+            batchId: batch._id,
+            certificateType: validated.certificateType,
+            fileUrl: fileUrl || validated.fileUrl || '',
+            fileHash: validated.fileHash,
+            ipfsHash: ipfsHash,
+            issuer: validated.issuer,
+            issueDate: new Date(),
+            expiryDate: new Date(validated.expiryDate),
+            verificationStatus,
         });
 
         // ── 5. Fraud Alert if suspicious ────────────────────────────────────────
         let fraudAlerts: unknown[] = [];
         if (duplicateDetected && fraudReason) {
-            await prisma.fraudAlert.create({
-                data: {
-                    batchId: batch.id,
-                    fraudType: ipfsHashMismatch ? 'HASH_MISMATCH' : 'DUPLICATE_CERTIFICATE',
-                    severity: 'CRITICAL',
-                    description: fraudReason,
-                    confidence: ipfsHashMismatch ? 1.0 : 0.99,
-                    status: 'OPEN',
-                },
+            await createFraudAlert({
+                batchId: batch._id,
+                fraudType: ipfsHashMismatch ? 'HASH_MISMATCH' : 'DUPLICATE_CERTIFICATE',
+                severity: 'CRITICAL',
+                description: fraudReason,
+                confidence: ipfsHashMismatch ? 1.0 : 0.99,
+                status: 'OPEN',
             });
         }
 
         // Always run fraud scan (detects other anomaly signals too)
-        fraudAlerts = await runFraudScan(batch.id);
+        fraudAlerts = await runFraudScan(batch._id);
 
         // ── 6. Recalculate Trust Score ───────────────────────────────────────────
-        await calculateTrustScore(batch.id);
+        await calculateTrustScore(batch._id);
 
         // ── 7. Audit Log ─────────────────────────────────────────────────────────
         await createAuditLog({
             userId: session.user.id,
             action: 'CERTIFICATE_UPLOAD',
             resource: 'Certificate',
-            resourceId: certificate.id,
+            resourceId: certificate._id,
             details: {
                 batchCode: batch.batchCode,
                 certificateType: validated.certificateType,
@@ -251,11 +248,12 @@ export async function POST(req: NextRequest) {
                 ? `Certificate uploaded, pinned to IPFS (${ipfsHash}), and SHA-256 verified successfully.`
                 : 'Certificate uploaded and SHA-256 verified successfully.',
         });
-    } catch (error: any) {
-        if (error.name === 'ZodError') {
-            return errorResponse(error.errors[0]?.message || 'Validation failed', 'VALIDATION_ERROR', 400);
+    } catch (error: unknown) {
+        if (isZodError(error)) {
+            return errorResponse(firstValidationMessage(error), 'VALIDATION_ERROR', 400);
         }
         console.error('[CertificateUpload] Error:', error);
-        return errorResponse(error.message || 'Failed to upload certificate', 'SERVER_ERROR', 500);
+        const message = error instanceof Error ? error.message : 'Failed to upload certificate';
+        return errorResponse(message, 'SERVER_ERROR', 500);
     }
 }

@@ -1,6 +1,5 @@
-import { NextRequest } from 'next/server';
 import { successResponse } from '@/lib/response';
-import { prisma } from '@/lib/prisma';
+import { databaseConfiguration, pingDatabase } from '@/lib/db/connection';
 import { isBlockchainConfigured } from '@/lib/blockchain';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
@@ -26,8 +25,12 @@ async function checkService(url: string): Promise<{ ok: boolean; latencyMs: numb
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
         return { ok: res.ok, latencyMs: Date.now() - start, error: res.ok ? undefined : `HTTP ${res.status}` };
-    } catch (err: any) {
-        return { ok: false, latencyMs: Date.now() - start, error: err?.message ?? String(err) };
+    } catch (err: unknown) {
+        return {
+            ok: false,
+            latencyMs: Date.now() - start,
+            error: err instanceof Error ? err.message : String(err),
+        };
     }
 }
 
@@ -39,20 +42,28 @@ function hasEnv(...names: string[]): boolean {
     });
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
     // ── Database: queried directly rather than through an internal HTTP call,
     //    so this reports the state of this process's own connection.
+    //
+    //    A missing MONGODB_URI is reported as `not_configured` and not as
+    //    `unavailable`. The two mean different things to whoever reads this:
+    //    `unavailable` says the database is down and someone should page,
+    //    `not_configured` says the deployment never supplied one.
     const dbStart = Date.now();
+    const dbConfig = databaseConfiguration();
     let database: ServiceReport;
-    try {
-        await prisma.$queryRaw`SELECT 1`;
-        database = {
-            status: 'healthy',
-            latencyMs: Date.now() - dbStart,
-            detail: 'Connection established and a query round-tripped.',
-        };
-    } catch (err: any) {
-        database = { status: 'unavailable', detail: err?.message ?? 'Query failed' };
+    if (!dbConfig.configured) {
+        database = { status: 'not_configured', detail: dbConfig.reason ?? 'MONGODB_URI is not set.' };
+    } else {
+        const ping = await pingDatabase();
+        database = ping.ok
+            ? {
+                  status: 'healthy',
+                  latencyMs: Date.now() - dbStart,
+                  detail: 'Connection established and the server answered a ping.',
+              }
+            : { status: 'unavailable', latencyMs: Date.now() - dbStart, detail: ping.reason ?? 'Ping failed.' };
     }
 
     const [ai, rag, ml, agents] = await Promise.all([
@@ -123,6 +134,11 @@ export async function GET(req: NextRequest) {
     const services: Record<string, ServiceReport> = {
         backend: { status: 'healthy', detail: 'The Next.js API is serving this request.' },
         database,
+        // The AI service's own check was computed and then dropped, so the
+        // response named three sub-endpoints as degraded without ever saying
+        // *why* — the service hosting all three was down, or was never
+        // configured. Those are different diagnoses, so it is reported now.
+        ai: aiService,
         ml: mlReport,
         rag: ragReport,
         agents: agentsReport,

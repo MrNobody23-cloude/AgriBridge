@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma';
+import { loadBatchWithRelations, updateBatch } from '@/lib/db/repositories/batches';
+import { upsertTrustScore } from '@/lib/db/repositories/agents';
 import { verifyBatchOnChain, ChainStatus } from '@/lib/blockchain';
 
 export interface TrustFactor {
@@ -54,15 +55,7 @@ export interface UnavailableFactor {
 export async function readStoredTrustScore(
     batchId: string
 ): Promise<TrustScoreResult | null> {
-    const batch = await prisma.batch.findFirst({
-        where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-        include: {
-            product: true,
-            farmer: { select: { name: true } },
-            // `trustScore` on Batch is a denormalized Int, not the relation.
-            trustScoreDetails: true,
-        },
-    });
+    const batch = await loadBatchWithRelations(batchId);
 
     if (!batch?.trustScoreDetails) return null;
 
@@ -82,7 +75,7 @@ export async function readStoredTrustScore(
     else if (finalScore >= 50) riskLevel = 'Moderate Risk';
 
     return {
-        batchId: batch.id,
+        batchId: batch._id,
         batchCode: batch.batchCode,
         crop: batch.product.name,
         farmerName: batch.farmer.name,
@@ -113,19 +106,13 @@ export async function readStoredTrustScore(
  *    UI must show it.
  */
 export async function calculateTrustScore(batchId: string): Promise<TrustScoreResult> {
-    const batch = await prisma.batch.findFirst({
-        where: {
-            OR: [{ id: batchId }, { batchCode: batchId }],
-        },
-        include: {
-            farmer: { include: { farmerProfile: true } },
-            product: true,
-            certificates: true,
-            events: true,
-            shipments: { include: { complianceChecks: true } },
-            fraudAlerts: true,
-            temperatureLogs: true,
-        },
+    // Every factor below reads the whole batch, and the trust score reads *all*
+    // sensor readings rather than a recent page: a deviation rate computed from
+    // the last 100 of several hundred would score the same batch differently
+    // depending on when it was recalculated. So the limits are lifted here.
+    const batch = await loadBatchWithRelations(batchId, {
+        temperatureLogLimit: 0,
+        shipmentLimit: 0,
     });
 
     if (!batch) {
@@ -155,8 +142,12 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
                 observed: desc,
             });
             if (risk) risks.push(risk);
-        } catch (e: any) {
-            unavailableFactors.push({ name, code, message: e?.message ?? unavailableMessage });
+        } catch (e: unknown) {
+            unavailableFactors.push({
+                name,
+                code,
+                message: e instanceof Error ? e.message : unavailableMessage,
+            });
         }
     };
 
@@ -309,7 +300,7 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
             ? 'All six factors were scorable.'
             : `Scored on ${coverageMax} of 100 available points; ${6 - factors.length} factor(s) had no evidence and contributed nothing: ${unavailableFactors.map((u) => u.name).join(', ')}.`;
 
-    let plainAi =
+    const plainAi =
         coverageMax === 0
             ? `${firstName}, batch ${batch.batchCode} has no evidence recorded against it yet — ` +
               `no certificates, sensor readings, custody events or ML prediction. A trust score ` +
@@ -319,10 +310,7 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
               (risks.length > 0 ? ` Outstanding: ${risks[0]}` : '');
 
     // Update DB records
-    await prisma.batch.update({
-        where: { id: batch.id },
-        data: { trustScore: finalScore },
-    });
+    await updateBatch(batch._id, { trustScore: finalScore });
 
     const payload = {
         blockchainScore: factors.find((f) => f.name === 'Blockchain Verification')?.score ?? 0,
@@ -338,14 +326,10 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
         explanation: plainAi,
     };
 
-    await prisma.trustScore.upsert({
-        where: { batchId: batch.id },
-        update: payload,
-        create: { batchId: batch.id, ...payload },
-    });
+    await upsertTrustScore({ batchId: batch._id, ...payload });
 
     return {
-        batchId: batch.id,
+        batchId: batch._id,
         batchCode: batch.batchCode,
         crop: cropName,
         farmerName: `${farmerName} (${batch.location})`,

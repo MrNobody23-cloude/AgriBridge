@@ -1,8 +1,12 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { findShipmentByIdOrCode, replaceComplianceChecks } from '@/lib/db/repositories/shipments';
+import { findBatchById } from '@/lib/db/repositories/batches';
+import { findProductNameById } from '@/lib/db/repositories/catalog';
+import { createAgentLog } from '@/lib/db/repositories/agents';
 import { requireAuth } from '@/lib/auth';
 import { complianceCheckSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
+import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -14,19 +18,20 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const validated = complianceCheckSchema.parse(body);
 
-        const shipment = await prisma.shipment.findFirst({
-            where: { OR: [{ id: validated.shipmentId }, { shipmentCode: validated.shipmentId }] },
-            include: {
-                batch: { include: { product: true, certificates: true } },
-                complianceChecks: true,
-            },
-        });
+        const shipment = await findShipmentByIdOrCode(validated.shipmentId);
 
         if (!shipment) {
             return errorResponse(`Shipment ${validated.shipmentId} not found`, 'SHIPMENT_NOT_FOUND', 404);
         }
 
-        const crop = validated.crop || shipment.batch.product.name;
+        // The `include: { batch: { include: { product, certificates } }, complianceChecks }`
+        // this used to fetch is not read below — the crop falls back to the
+        // product name, and the old checks are deleted rather than compared —
+        // so only the product is loaded.
+        const batch = await findBatchById(shipment.batchId);
+        const productName = batch ? await findProductNameById(batch.productId) : null;
+
+        const crop = validated.crop || productName || 'unknown crop';
 
         // Call Python RAG service for real regulatory compliance check
         let ragResult: Record<string, unknown> = {};
@@ -37,8 +42,8 @@ export async function POST(req: NextRequest) {
                 body: JSON.stringify({
                     country: validated.country,
                     crop,
-                    shipmentId: shipment.id,
-                    batchId: shipment.batch.id,
+                    shipmentId: shipment._id,
+                    batchId: batch?._id,
                 }),
                 signal: AbortSignal.timeout(30000),
             });
@@ -47,8 +52,8 @@ export async function POST(req: NextRequest) {
             } else {
                 console.warn('RAG service returned:', res.status);
             }
-        } catch (err: any) {
-            console.warn('RAG service unavailable:', err.message);
+        } catch (err: unknown) {
+            console.warn('RAG service unavailable:', err instanceof Error ? err.message : String(err));
         }
 
         const answer = String(ragResult.answer || '');
@@ -78,39 +83,36 @@ export async function POST(req: NextRequest) {
             },
         ];
 
-        // Delete old checks for this shipment/country, then insert fresh ones
-        await prisma.complianceCheck.deleteMany({
-            where: { shipmentId: shipment.id, country: validated.country },
-        });
-        await prisma.complianceCheck.createMany({
-            data: checks.map(c => ({
-                shipmentId: shipment.id,
-                country: validated.country,
+        // Delete old checks for this shipment/country, then insert fresh ones.
+        // The repository does both; neither half is atomic, exactly as under
+        // Prisma — see the note on `replaceComplianceChecks`.
+        await replaceComplianceChecks(
+            shipment._id,
+            validated.country,
+            checks.map((c) => ({
                 requirement: c.requirement,
                 status: c.status,
                 explanation: c.explanation,
                 source: c.source,
                 evidence: JSON.stringify(ragResult.evidence || []),
-            })),
-        });
+            }))
+        );
 
         // Log
-        await prisma.aiAgentLog.create({
-            data: {
-                agentName: 'Compliance Agent (RAG)',
-                agentType: 'compliance',
-                task: `Regulatory screening for export to ${validated.country}`,
-                input: JSON.stringify({ country: validated.country, crop, shipmentId: shipment.id }),
-                output: answer.slice(0, 500),
-                confidence,
-                status: passed ? 'PASSED' : 'PENDING',
-                evidence: JSON.stringify(ragResult.evidence || []),
-                sources: JSON.stringify(sources),
-            },
+        await createAgentLog({
+            agentName: 'Compliance Agent (RAG)',
+            agentType: 'compliance',
+            task: `Regulatory screening for export to ${validated.country}`,
+            input: JSON.stringify({ country: validated.country, crop, shipmentId: shipment._id }),
+            output: answer.slice(0, 500),
+            confidence,
+            status: passed ? 'PASSED' : 'PENDING',
+            evidence: JSON.stringify(ragResult.evidence || []),
+            sources: JSON.stringify(sources),
         });
 
         return successResponse({
-            shipmentId: shipment.id,
+            shipmentId: shipment._id,
             shipmentCode: shipment.shipmentCode,
             country: validated.country,
             crop,
@@ -121,9 +123,9 @@ export async function POST(req: NextRequest) {
             confidence,
             warning: !ragResult.answer ? 'AI_SERVICE_UNAVAILABLE' : undefined,
         });
-    } catch (err: any) {
-        if (err.name === 'ZodError') {
-            return errorResponse(err.errors[0]?.message || 'Validation failed', 'VALIDATION_ERROR', 400);
+    } catch (err: unknown) {
+        if (isZodError(err)) {
+            return errorResponse(firstValidationMessage(err), 'VALIDATION_ERROR', 400);
         }
         console.error('Compliance check error:', err);
         return errorResponse('Failed to perform compliance check', 'SERVER_ERROR', 500);

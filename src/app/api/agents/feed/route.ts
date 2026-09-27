@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { listAgentLogs } from '@/lib/db/repositories/agents';
 import { requirePermission } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 
@@ -8,10 +8,7 @@ export async function GET(req: NextRequest) {
     if (authResult instanceof Response) return authResult;
 
     try {
-        const logs = await prisma.aiAgentLog.findMany({
-            take: 20,
-            orderBy: { createdAt: 'desc' },
-        });
+        const logs = await listAgentLogs(20);
 
         const feed = logs.map((log) => {
             let agentType: 'fraud' | 'compliance' | 'traceability' | 'quality' | 'consumer' = 'quality';
@@ -43,7 +40,7 @@ export async function GET(req: NextRequest) {
             else if (log.status === 'CONFLICT' || log.status === 'ANOMALY') badgeColor = 'amber';
 
             return {
-                id: log.id,
+                id: log._id,
                 time: new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false }),
                 agent: agentIcon,
                 agentType,
@@ -54,7 +51,7 @@ export async function GET(req: NextRequest) {
         });
 
         return successResponse(feed);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Agent feed error:', error);
         return errorResponse('Failed to fetch agent activity feed', 'SERVER_ERROR', 500);
     }

@@ -1,6 +1,6 @@
-import { prisma } from '@/lib/prisma';
+import { loadBatchWithRelations } from '@/lib/db/repositories/batches';
+import { createAgentLog } from '@/lib/db/repositories/agents';
 import { runFraudScan } from './fraudDetectionService';
-import { calculateTrustScore } from './trustScoreService';
 import { predictSpoilage as heuristicSpoilage } from './spoilageService';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
@@ -18,6 +18,33 @@ export interface AgentResponse {
 }
 
 /**
+ * A retrieval source's human-readable label, if the RAG service supplied one.
+ *
+ * `sources` is typed `unknown[]` because the payload comes off a `fetch` from
+ * the Python service — the compiler has no reason to trust its shape. The
+ * `(sources[0] as any)?.source` that used to be here read `.source` off
+ * whatever came back, so a string, a number or a missing field all produced
+ * `undefined` at runtime with nothing to notice. Narrowing instead means the
+ * label is only used when it really is a non-empty string.
+ */
+const FALLBACK_SOURCE = 'AgriBridge RAG Knowledge Base';
+
+/** `err.message` for a `catch (err: unknown)`, without the non-null assertion. */
+function errText(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+function sourceLabelOf(source: unknown): string {
+    if (source && typeof source === 'object' && 'source' in source) {
+        const value = (source as { source: unknown }).source;
+        if (typeof value === 'string' && value.trim().length > 0) {
+            return value;
+        }
+    }
+    return FALLBACK_SOURCE;
+}
+
+/**
  * Compliance Agent — delegates to Python RAG service.
  * Falls back to heuristic if Python service is unavailable.
  */
@@ -26,15 +53,11 @@ export async function checkComplianceRAG(
     batchId?: string,
     shipmentId?: string
 ): Promise<{ country: string; passed: boolean; checks: unknown[]; summary: string; sources?: unknown[] }> {
-    let batch: { product?: { name?: string } } | null = null;
+    let crop = 'General Agriculture';
     if (batchId) {
-        batch = await prisma.batch.findFirst({
-            where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-            include: { product: true },
-        }) as any;
+        const batch = await loadBatchWithRelations(batchId);
+        if (batch?.product?.name) crop = batch.product.name;
     }
-
-    const crop = (batch as any)?.product?.name || 'General Agriculture';
 
     try {
         const res = await fetch(`${AI_SERVICE_URL}/api/rag/compliance/check`, {
@@ -53,7 +76,7 @@ export async function checkComplianceRAG(
                 requirement: `Export compliance: ${country}`,
                 status: passed ? 'PASSED' : 'PENDING',
                 explanation: answer.slice(0, 500),
-                source: (sources[0] as any)?.source || 'AgriBridge RAG Knowledge Base',
+                source: sourceLabelOf(sources[0]),
                 evidence: data.evidence,
             }];
             // A run that came back confident with no evidence to back it is
@@ -64,26 +87,24 @@ export async function checkComplianceRAG(
                 ? `RAG Compliance Agent retrieved regulatory evidence for export to ${country}. Confidence: ${Math.round(reportedConfidence * 100)}%.`
                 : `RAG Compliance Agent returned an answer for export to ${country} without reporting a confidence value. Verify the cited source before relying on it.`;
 
-            await prisma.aiAgentLog.create({
-                data: {
-                    agentName: 'Compliance Agent (RAG)',
-                    agentType: 'compliance',
-                    task: `Regulatory Screening for Export to ${country}`,
-                    input: `Country: ${country}, Batch: ${batchId || 'N/A'}`,
-                    output: summary,
-                    // 0 rather than the previous 0.85 default: `res.ok` only
-                    // means an HTTP 200, not that the RAG service had evidence.
-                    // A compliant answer with no confidence behind it is not a
-                    // finding, which is why `summary` above says so too.
-                    confidence: Number(data.confidence || 0),
-                    status: passed ? 'PASSED' : 'PENDING',
-                    sources: JSON.stringify(sources),
-                },
+            await createAgentLog({
+                agentName: 'Compliance Agent (RAG)',
+                agentType: 'compliance',
+                task: `Regulatory Screening for Export to ${country}`,
+                input: `Country: ${country}, Batch: ${batchId || 'N/A'}`,
+                output: summary,
+                // 0 rather than the previous 0.85 default: `res.ok` only
+                // means an HTTP 200, not that the RAG service had evidence.
+                // A compliant answer with no confidence behind it is not a
+                // finding, which is why `summary` above says so too.
+                confidence: Number(data.confidence || 0),
+                status: passed ? 'PASSED' : 'PENDING',
+                sources: JSON.stringify(sources),
             });
             return { country, passed, checks, summary, sources };
         }
-    } catch (err: any) {
-        console.warn(`[ComplianceAgent] RAG service unavailable: ${err.message}`);
+    } catch (err: unknown) {
+        console.warn(`[ComplianceAgent] RAG service unavailable: ${errText(err)}`);
     }
 
     // Fallback: return honest "service unavailable" response
@@ -108,10 +129,7 @@ export async function answerConsumerQuery(
     batchCode: string,
     userQuery: string
 ): Promise<{ answer: string; checkpoints: number; trustScore: number; verifiedOnChain: boolean; sources?: unknown[]; confidence?: number }> {
-    const batch = await prisma.batch.findFirst({
-        where: { OR: [{ batchCode }, { id: batchCode }] },
-        include: { product: true, events: true, farmer: { include: { farmerProfile: true } }, certificates: true, trustScoreDetails: true },
-    });
+    const batch = await loadBatchWithRelations(batchCode, { shipmentLimit: 0 });
 
     if (!batch) {
         return {
@@ -162,8 +180,8 @@ export async function answerConsumerQuery(
             sources = (data.sources as unknown[]) || [];
             confidence = Number(data.confidence || 0);
         }
-    } catch (err: any) {
-        console.warn(`[ConsumerAgent] AI service unavailable: ${err.message}`);
+    } catch (err: unknown) {
+        console.warn(`[ConsumerAgent] AI service unavailable: ${errText(err)}`);
     }
 
     if (!answer) {
@@ -171,16 +189,14 @@ export async function answerConsumerQuery(
         answer = `Batch ${batch.batchCode} (${batch.product.name}) was produced by ${batch.farmer.name} in ${batch.location}. Blockchain status: ${chainV.status}. Trust score: ${batch.trustScore}/100. ${batch.events.length} supply chain events recorded.`;
     }
 
-    await prisma.aiAgentLog.create({
-        data: {
-            agentName: 'Consumer Trust Agent',
-            agentType: 'consumer',
-            task: `Answer consumer query for ${batch.batchCode}`,
-            input: userQuery,
-            output: answer,
-            confidence,
-            status: 'ANSWERED',
-        },
+    await createAgentLog({
+        agentName: 'Consumer Trust Agent',
+        agentType: 'consumer',
+        task: `Answer consumer query for ${batch.batchCode}`,
+        input: userQuery,
+        output: answer,
+        confidence,
+        status: 'ANSWERED',
     });
 
     return {
@@ -200,18 +216,13 @@ export async function answerConsumerQuery(
 export async function runSupervisorOrchestration(batchId: string): Promise<AgentResponse[]> {
     const responses: AgentResponse[] = [];
 
-    const batch = await prisma.batch.findFirst({
-        where: { OR: [{ id: batchId }, { batchCode: batchId }] },
-        include: {
-            product: true,
-            certificates: true,
-            events: { orderBy: { timestamp: 'asc' } },
-            farmer: { include: { farmerProfile: true } },
-            fraudAlerts: true,
-            trustScoreDetails: true,
-            temperatureLogs: { orderBy: { timestamp: 'desc' }, take: 50 },
-            shipments: { include: { complianceChecks: true, exporter: { select: { name: true } } } },
-        },
+    const batch = await loadBatchWithRelations(batchId, {
+        temperatureLogLimit: 50,
+        eventOrder: 'asc',
+        // Every shipment, not just the most recent: the orchestrator passes
+        // `batch.shipments` to the Python service as the full picture, and
+        // the fallback below reads shipments[0] for the destination country.
+        shipmentLimit: 0,
     });
     if (!batch) return responses;
 
@@ -245,8 +256,8 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
             signal: AbortSignal.timeout(45000),
         });
         if (res.ok) pythonResult = await res.json() as Record<string, unknown>;
-    } catch (err: any) {
-        console.warn(`[Supervisor] Python AI service unavailable: ${err.message}. Using fallback.`);
+    } catch (err: unknown) {
+        console.warn(`[Supervisor] Python AI service unavailable: ${errText(err)}. Using fallback.`);
     }
 
     if (pythonResult?.agentResponses) {
@@ -275,8 +286,18 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
         });
 
         // 2. Fraud Detection (real rules)
-        const fraudScans = await runFraudScan(batch.id);
-        const openFraud = batch.fraudAlerts.filter(f => f.status !== 'RESOLVED' && f.status !== 'FALSE_POSITIVE');
+        //
+        // The return value is discarded **on purpose**: `runFraudScan` persists
+        // a `FraudAlert` row for every rule it fires, and the alerts this
+        // supervisor run just created are what the line below needs. Reading
+        // them out of `batch.fraudAlerts` — the relation loaded *before* the
+        // scan — would report the pre-existing alerts only, so a batch that is
+        // fraudulent right now could be reported as clean. `openFraud` is
+        // re-read below for that reason.
+        await runFraudScan(batch._id);
+        const rescanned = await loadBatchWithRelations(batch._id, { shipmentLimit: 0 });
+        const openFraud = (rescanned?.fraudAlerts ?? batch.fraudAlerts)
+            .filter(f => f.status !== 'RESOLVED' && f.status !== 'FALSE_POSITIVE');
         responses.push({
             agentName: '🚨 Fraud Detection Agent',
             agentType: 'fraud',
@@ -333,7 +354,7 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
 
         // 4. Compliance
         const destination = batch.destinationCountry || batch.shipments[0]?.destinationCountry || 'UK';
-        const complianceResult = await checkComplianceRAG(destination, batch.id);
+        const complianceResult = await checkComplianceRAG(destination, batch._id);
         responses.push({
             agentName: '⚖️ Compliance Agent',
             agentType: 'compliance',
@@ -370,17 +391,15 @@ export async function runSupervisorOrchestration(batchId: string): Promise<Agent
 
     // Supervisor log
     const flagged = responses.filter(r => r.status === 'FLAGGED' || r.status === 'HIGH_RISK');
-    await prisma.aiAgentLog.create({
-        data: {
-            agentName: 'Supervisor Agent',
-            agentType: 'supervisor',
-            task: `Multi-Agent Orchestration: ${batch.batchCode}`,
-            input: JSON.stringify({ batchId: batch.batchCode }),
-            output: `${responses.length}-agent pipeline. Status: ${flagged.length > 0 ? 'FLAGGED' : 'PASSED'}. ${flagged.length} issue(s).`,
-            confidence: 0.98,
-            status: flagged.length > 0 ? 'FLAGGED' : 'PASSED',
-            toolsUsed: JSON.stringify(['python_ai_service', 'fraud_detector', 'compliance_rag']),
-        },
+    await createAgentLog({
+        agentName: 'Supervisor Agent',
+        agentType: 'supervisor',
+        task: `Multi-Agent Orchestration: ${batch.batchCode}`,
+        input: JSON.stringify({ batchId: batch.batchCode }),
+        output: `${responses.length}-agent pipeline. Status: ${flagged.length > 0 ? 'FLAGGED' : 'PASSED'}. ${flagged.length} issue(s).`,
+        confidence: 0.98,
+        status: flagged.length > 0 ? 'FLAGGED' : 'PASSED',
+        toolsUsed: JSON.stringify(['python_ai_service', 'fraud_detector', 'compliance_rag']),
     });
 
     return responses;

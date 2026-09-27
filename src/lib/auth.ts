@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from './prisma';
+import { findUserByIdWithProfileSafe } from './db/repositories/users';
 
 const JWT_SECRET = process.env.AUTH_SECRET;
 if (!JWT_SECRET) {
@@ -56,13 +56,18 @@ export async function getSessionUser(): Promise<UserPayload | null> {
     }
 }
 
+/**
+ * The signed-in user with their farmer profile, or null.
+ *
+ * `password` is excluded **in the query**, not by the caller. The only caller
+ * used to destructure it away afterwards, which meant the bcrypt hash was read
+ * from the database and held in this process for no reason. A projection that
+ * depends on every caller remembering to strip a field is not a boundary.
+ */
 export async function getFullSessionUser() {
     const payload = await getSessionUser();
     if (!payload) return null;
-    return prisma.user.findUnique({
-        where: { id: payload.id },
-        include: { farmerProfile: true },
-    });
+    return findUserByIdWithProfileSafe(payload.id);
 }
 
 // ─── Auth guard for API Route Handlers ────────────────────────────────────────

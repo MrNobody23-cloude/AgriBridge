@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import {
+    loadBatchWithRelations, updateBatch, createMlPrediction,
+} from '@/lib/db/repositories/batches';
 import { requirePermission } from '@/lib/auth';
 import { qualityPredictionSchema } from '@/lib/validators';
 import { successResponse, errorResponse } from '@/lib/response';
+import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -17,13 +20,8 @@ export async function POST(req: NextRequest) {
         const body = await req.json();
         const validated = qualityPredictionSchema.parse(body);
 
-        const batch = await prisma.batch.findFirst({
-            where: { OR: [{ id: validated.batchId }, { batchCode: validated.batchId }] },
-            include: {
-                product: true,
-                certificates: true,
-                temperatureLogs: { orderBy: { timestamp: 'desc' }, take: 50 },
-            },
+        const batch = await loadBatchWithRelations(validated.batchId, {
+            temperatureLogLimit: 50,
         });
         if (!batch) return errorResponse(`Batch ${validated.batchId} not found`, 'BATCH_NOT_FOUND', 404);
 
@@ -45,8 +43,8 @@ export async function POST(req: NextRequest) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    batchId: batch.id,
-                    crop: batch.product.name,
+                    batchId: batch._id,
+                    crop: batch.product?.name,
                     temperature: avgTemp,
                     humidity: validated.humidity,
                     days_since_harvest: daysSinceHarvest,
@@ -57,8 +55,8 @@ export async function POST(req: NextRequest) {
                 signal: AbortSignal.timeout(15000),
             });
             if (res.ok) mlResult = await res.json();
-        } catch (err: any) {
-            console.warn('ML quality service unavailable:', err.message);
+        } catch (err: unknown) {
+            console.warn('ML quality service unavailable:', err instanceof Error ? err.message : String(err));
         }
 
         if (!mlResult) {
@@ -67,28 +65,23 @@ export async function POST(req: NextRequest) {
 
         const prediction = mlResult.prediction as Record<string, unknown>;
 
-        await prisma.batch.update({
-            where: { id: batch.id },
-            data: {
-                qualityScore: Number(prediction.qualityScore),
-                qualityGrade: String(prediction.grade),
-            },
+        await updateBatch(batch._id, {
+            qualityScore: Number(prediction.qualityScore),
+            qualityGrade: String(prediction.grade),
         });
-        await prisma.mlPrediction.create({
-            data: {
-                batchId: batch.id,
-                modelType: 'QUALITY',
-                modelName: 'quality-xgboost',
-                modelVersion: '1.0.0',
-                result: JSON.stringify(prediction),
-                confidence: Number(prediction.confidence),
-                inputJson: JSON.stringify({ crop: batch.product.name, temperature: avgTemp, daysSinceHarvest }),
-            },
+        await createMlPrediction({
+            batchId: batch._id,
+            modelType: 'QUALITY',
+            modelName: 'quality-xgboost',
+            modelVersion: '1.0.0',
+            result: JSON.stringify(prediction),
+            confidence: Number(prediction.confidence),
+            inputJson: JSON.stringify({ crop: batch.product?.name, temperature: avgTemp, daysSinceHarvest }),
         });
 
-        return successResponse({ ...mlResult, batchId: batch.id, batchCode: batch.batchCode });
-    } catch (err: any) {
-        if (err.name === 'ZodError') return errorResponse(err.errors[0]?.message, 'VALIDATION_ERROR', 400);
+        return successResponse({ ...mlResult, batchId: batch._id, batchCode: batch.batchCode });
+    } catch (err: unknown) {
+        if (isZodError(err)) return errorResponse(firstValidationMessage(err), 'VALIDATION_ERROR', 400);
         console.error('Quality prediction error:', err);
         return errorResponse('Failed to run quality prediction', 'SERVER_ERROR', 500);
     }

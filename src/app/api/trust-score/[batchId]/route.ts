@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/response';
 import { requirePermission } from '@/lib/auth';
 import { readStoredTrustScore, calculateTrustScore } from '@/lib/services/trustScoreService';
@@ -27,9 +26,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ batc
             return errorResponse('Trust score has not been computed for this batch', 'TRUST_SCORE_NOT_COMPUTED', 404);
         }
         return successResponse(stored);
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Trust score read error:', error);
-        return errorResponse(error.message || 'Failed to read Trust Score', 'SERVER_ERROR', 500);
+        const message = error instanceof Error ? error.message : 'Failed to read Trust Score';
+        return errorResponse(message, 'SERVER_ERROR', 500);
     }
 }
 
@@ -41,11 +41,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bat
         const { batchId } = await params;
         const result = await calculateTrustScore(batchId);
         return successResponse(result);
-    } catch (error: any) {
-        if (typeof error?.message === 'string' && error.message.includes('not found')) {
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '';
+        if (message.includes('not found')) {
             return errorResponse('Batch was not found', 'BATCH_NOT_FOUND', 404);
         }
         console.error('Trust score calculation error:', error);
-        return errorResponse(error.message || 'Failed to calculate Trust Score', 'SERVER_ERROR', 500);
+        return errorResponse(message || 'Failed to calculate Trust Score', 'SERVER_ERROR', 500);
     }
 }

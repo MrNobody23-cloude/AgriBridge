@@ -61,7 +61,7 @@ export default function AgentsPage() {
           message: json.error?.message || 'Agent registry could not be read.',
         });
       }
-    } catch (e) {
+    } catch {
       setRegistry({
         serviceReachable: false,
         agents: [],

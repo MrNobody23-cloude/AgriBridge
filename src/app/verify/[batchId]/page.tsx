@@ -4,12 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import TrustScoreGauge from '@/components/TrustScoreGauge';
+import type { ApiBatchDetail } from '@/lib/api-types';
 
 export default function PublicVerifyPage() {
     const params = useParams();
     const batchId = params.batchId as string;
 
-    const [data, setData] = useState<any>(null);
+    const [data, setData] = useState<ApiBatchDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -54,7 +55,12 @@ export default function PublicVerifyPage() {
         );
     }
 
-    const { batch, blockchainVerification, trustDetails } = data;
+    // The response is the batch itself, spread flat with its relations — there
+    // is no `batch` wrapper. `chainVerification` and `trustScoreDetails` are the
+    // repository's key names; `blockchainVerification` and `trustDetails` are not.
+    const batch = data;
+    const blockchainVerification = data.chainVerification;
+    const trustDetails = data.trustScoreDetails;
     // Three states, not two. A chain that is unconfigured or unreachable has not
     // verified anything — it has also produced no evidence of tampering. Showing
     // "TAMPER WARNING" to a consumer scanning a QR code because nobody set a
@@ -169,8 +175,8 @@ export default function PublicVerifyPage() {
                 <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm space-y-4">
                     <h2 className="text-base font-bold text-[#1a1a1a]">📍 Supply Chain Audit Events</h2>
                     <div className="space-y-3">
-                        {batch.events?.map((evt: any, idx: number) => (
-                            <div key={evt.id || idx} className="flex gap-4 items-start p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        {batch.events?.map((evt, idx) => (
+                            <div key={evt._id || idx} className="flex gap-4 items-start p-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <div className="w-8 h-8 rounded-full bg-green-100 text-[#16a34a] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                                     {idx + 1}
                                 </div>

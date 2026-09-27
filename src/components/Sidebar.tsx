@@ -1,13 +1,14 @@
 'use client';
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard, Truck, Package, Store, ShieldCheck, UserCheck,
+  Truck, Package, Store, ShieldCheck, UserCheck,
   Activity, Users, BarChart3, Link2, LogOut, ChevronRight,
   Leaf, Globe, FileText
 } from 'lucide-react';
 import { hasPermission, Permission, Role } from '@/lib/permissions';
+import type { SessionUser } from '@/lib/session';
 
 interface NavItem {
   href: string;
@@ -35,7 +36,7 @@ const allNavItems: NavItem[] = [
   { href: '/audit', label: 'Audit Logs', icon: FileText, permission: 'audit:view', section: 'Tools' },
 ];
 
-export default function Sidebar({ user }: { user: any }) {
+export default function Sidebar({ user }: { user: SessionUser }) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);

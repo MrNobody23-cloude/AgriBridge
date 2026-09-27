@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import { useRouter } from 'next/navigation';
+import type { SessionUser } from '@/lib/session';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -10,7 +11,7 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children, title }: DashboardLayoutProps) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 

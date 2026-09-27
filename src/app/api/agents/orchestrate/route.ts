@@ -25,8 +25,9 @@ export async function POST(req: NextRequest) {
 
         const agentResponses = await runSupervisorOrchestration(batchId);
         return successResponse({ agentResponses, total: agentResponses.length });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[Orchestrate] Error:', error);
-        return errorResponse(error.message || 'Orchestration failed', 'SERVER_ERROR', 500);
+        const message = error instanceof Error ? error.message : 'Orchestration failed';
+        return errorResponse(message, 'SERVER_ERROR', 500);
     }
 }

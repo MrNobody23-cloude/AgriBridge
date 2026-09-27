@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
+import type { SessionUser } from '@/lib/session';
 
 const pageTitles: Record<string, string> = {
   '/farmer': 'Farmer Overview',
@@ -16,7 +17,7 @@ const pageTitles: Record<string, string> = {
   '/trust-score': 'Trust Analysis',
 };
 
-export default function TopBar({ title: propTitle, user }: { title?: string; user?: any }) {
+export default function TopBar({ title: propTitle, user }: { title?: string; user?: SessionUser }) {
   const pathname = usePathname();
   const router = useRouter();
   const title = propTitle || pageTitles[pathname] || 'Dashboard';
@@ -48,12 +49,21 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
   }, []);
 
   const handleLogout = async () => {
+    // `router.push` rather than `window.location.href`. The eslint rule
+    // `no-location-assign-relative-destination` is not a style preference here:
+    // assigning a *relative* href to `window.location` is how a logout silently
+    // fails to navigate, and it throws away the client-side router that the rest
+    // of the app is already using. A full `router.refresh()` afterwards clears
+    // the server component cache so the old session is not still rendered.
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/login';
     } catch {
-      window.location.href = '/login';
+      // The cookie is cleared server-side on a successful logout. If the request
+      // itself failed, navigate anyway — the login page is the safe destination
+      // either way, and staying put would show a stale authenticated shell.
     }
+    router.push('/login');
+    router.refresh();
   };
 
   return (

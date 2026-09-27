@@ -1,7 +1,17 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { disconnectFromDatabase } from '../src/lib/db/connection';
+import {
+    findUserByEmail, createUser, createUserWithProfile,
+} from '../src/lib/db/repositories/users';
 
-const prisma = new PrismaClient();
+/**
+ * Seed one account per role for local development and the demo.
+ *
+ * Idempotent on `email`, which carries a unique index — re-running updates
+ * nothing and creates nothing. It does **not** reset an existing password: a
+ * re-run is not a way to get back into an account whose password you have
+ * changed. That is a deliberate difference from a naive "upsert and overwrite".
+ */
 
 async function seedTestUsers() {
     console.log('Seeding test accounts...');
@@ -16,32 +26,42 @@ async function seedTestUsers() {
         { email: 'retailer@agribridge.test', name: 'Test Retailer', role: 'RETAILER', phone: '555-0105' },
         { email: 'consumer@agribridge.test', name: 'Test Consumer', role: 'CONSUMER', phone: '555-0106' },
         { email: 'regulator@agribridge.test', name: 'Test Regulator', role: 'REGULATOR', phone: '555-0107' },
-        { email: 'admin@agribridge.test', name: 'Test Admin', role: 'ADMIN', phone: '555-0108' }
+        { email: 'admin@agribridge.test', name: 'Test Admin', role: 'ADMIN', phone: '555-0108' },
     ];
 
     for (const testUser of testUsers) {
-        const existing = await prisma.user.findUnique({ where: { email: testUser.email } });
-        if (!existing) {
-            await prisma.user.create({
-                data: {
-                    ...testUser,
-                    password: hashedPassword,
-                    ...(testUser.role === 'FARMER' ? {
-                        farmerProfile: {
-                            create: {
-                                farmName: 'Test Farm',
-                                district: 'Nashik',
-                                state: 'Maharashtra',
-                                location: 'Test Location'
-                            }
-                        }
-                    } : {})
-                }
-            });
-            console.log(`Created user: ${testUser.email} [${testUser.role}]`);
-        } else {
+        const existing = await findUserByEmail(testUser.email);
+        if (existing) {
             console.log(`User already exists: ${testUser.email}`);
+            continue;
         }
+
+        if (testUser.role === 'FARMER') {
+            // One write, both documents — see `createUserWithProfile`. A farmer
+            // without a profile cannot log in and repair it.
+            await createUserWithProfile({
+                name: testUser.name,
+                email: testUser.email,
+                password: hashedPassword,
+                role: testUser.role,
+                phone: testUser.phone,
+                farmerProfile: {
+                    farmName: 'Test Farm',
+                    district: 'Nashik',
+                    state: 'Maharashtra',
+                    location: 'Test Location',
+                },
+            });
+        } else {
+            await createUser({
+                name: testUser.name,
+                email: testUser.email,
+                password: hashedPassword,
+                role: testUser.role,
+                phone: testUser.phone,
+            });
+        }
+        console.log(`Created user: ${testUser.email} [${testUser.role}]`);
     }
 
     console.log(`\nSeed complete!`);
@@ -54,5 +74,5 @@ seedTestUsers()
         process.exit(1);
     })
     .finally(async () => {
-        await prisma.$disconnect();
+        await disconnectFromDatabase();
     });

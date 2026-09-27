@@ -160,10 +160,10 @@ export async function registerBatchOnChain(
             mode: 'real',
             reason: null,
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         // A chain that is configured but fails is a failure, not a mock. The
         // batch is still created in the database, without a chain record.
-        const reason = `BLOCKCHAIN_WRITE_FAILED: ${error?.message ?? String(error)}`;
+        const reason = `BLOCKCHAIN_WRITE_FAILED: ${error instanceof Error ? error.message : String(error)}`;
         console.error(`[blockchain] ${reason}`);
         return {
             success: false,
@@ -238,9 +238,9 @@ export async function verifyBatchOnChain(
                 : `HASH MISMATCH: database (${(databaseHash || '').slice(0, 10)}...) does not ` +
                   `match on-chain (${chainHash.slice(0, 10)}...). Possible record tampering.`,
         };
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Configured but unreachable. This is not a pass and not tampering.
-        const reason = `BLOCKCHAIN_UNREACHABLE: ${error?.message ?? String(error)}`;
+        const reason = `BLOCKCHAIN_UNREACHABLE: ${error instanceof Error ? error.message : String(error)}`;
         console.error(`[blockchain] ${reason}`);
         return {
             verified: false,

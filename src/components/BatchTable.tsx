@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import type { BatchStatus } from '@/lib/api-types';
 
 export interface BatchRow {
   id: string;
@@ -11,7 +12,7 @@ export interface BatchRow {
   unit?: string;
   harvestDate: string;
   trustScore: number;
-  status: 'Exported' | 'In Transit' | 'Delivered' | 'Flagged' | 'Processing';
+  status: BatchStatus;
 }
 
 /**
@@ -59,6 +60,7 @@ export default function BatchTable({ rows = [] }: { rows?: BatchRow[] }) {
               else if (row.status === 'In Transit') statusColor = 'bg-amber-100 text-amber-800';
               else if (row.status === 'Delivered') statusColor = 'bg-green-100 text-green-800';
               else if (row.status === 'Flagged') statusColor = 'bg-red-100 text-red-800';
+              else if (row.status === 'Registered') statusColor = 'bg-indigo-100 text-indigo-800';
 
               return (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white/30 hover:bg-white/50 transition-colors' : 'bg-transparent hover:bg-white/40 transition-colors'}>
