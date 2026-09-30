@@ -457,6 +457,53 @@ const CounterSchema = new S(
     { timestamps: false, collection: 'counters' }
 );
 
+// ─── MARKET LISTINGS (n8n workflow) ─────────────────────────────────────────
+
+/**
+ * Produce listings created by the n8n WhatsApp → MongoDB workflow.
+ *
+ * Field names match exactly what n8n stores so no migration is needed.
+ * The collection name is 'market_listings'; the app's own product catalog
+ * lives in 'products' and is a completely different shape.
+ *
+ * All fields are optional / have defaults because n8n may send a subset
+ * depending on which version of the workflow is running.
+ */
+const MarketListingSchema = new S(
+    {
+        // The farmer's phone number — the primary identity key from n8n
+        phone_number: { type: String, default: null },
+        // Also stored as user_key in some workflow versions
+        user_key: { type: String, default: null },
+        product_name: { type: String, required: true },
+        quantity: { type: Number, default: null },
+        unit: { type: String, default: 'kg' },
+        price: { type: Number, default: null },
+        price_unit: { type: String, default: null },
+        location: { type: String, default: null },
+        /// SELL | BUY
+        listing_type: { type: String, default: 'SELL' },
+        /// active | inactive | expired
+        status: { type: String, default: 'active' },
+        // n8n may store a custom timestamp string
+        created_at: { type: String, default: null },
+        farmer_name: { type: String, default: null },
+        notes: { type: String, default: null },
+    },
+    {
+        // `timestamps: true` adds Mongoose's own createdAt/updatedAt in
+        // addition to the n8n-stored `created_at` string field.
+        timestamps: true,
+        collection: 'market_listings',
+        // Keep unknown fields n8n may add in future workflow versions.
+        strict: false,
+    }
+);
+MarketListingSchema.index({ phone_number: 1 });
+MarketListingSchema.index({ user_key: 1 });
+MarketListingSchema.index({ status: 1, listing_type: 1 });
+MarketListingSchema.index({ createdAt: -1 });
+
 // ─── RAG KNOWLEDGE BASE ───────────────────────────────────────────────────────
 
 /**
@@ -803,6 +850,29 @@ export interface RagDocumentDoc {
     updatedAt: Date;
 }
 
+// ─── LEAN DOCUMENT TYPES (continued) ────────────────────────────────────────
+
+export interface MarketListingDoc {
+    _id: string;
+    phone_number?: string | null;
+    user_key?: string | null;
+    product_name: string;
+    quantity?: number | null;
+    unit?: string | null;
+    price?: number | null;
+    price_unit?: string | null;
+    location?: string | null;
+    listing_type?: string | null;
+    status?: string | null;
+    created_at?: string | null;
+    farmer_name?: string | null;
+    notes?: string | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+    // strict: false — allow extra n8n fields through without type errors
+    [key: string]: unknown;
+}
+
 // ─── MODEL REGISTRY ───────────────────────────────────────────────────────────
 
 /**
@@ -847,3 +917,4 @@ export const AiAgentLogModel: AnyModel = register('AiAgentLog', AiAgentLogSchema
 export const NotificationModel: AnyModel = register('Notification', NotificationSchema);
 export const AuditLogModel: AnyModel = register('AuditLog', AuditLogSchema);
 export const CounterModel: AnyModel = register('Counter', CounterSchema);
+export const MarketListingModel: AnyModel = register('MarketListing', MarketListingSchema);

@@ -16,6 +16,7 @@ const TOKEN_NAME = 'agribridge_token';
 const TOKEN_EXPIRY = '7d';
 
 export interface UserPayload {
+    phone: null;
     id: string;
     email: string;
     name: string;
