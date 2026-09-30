@@ -4,9 +4,12 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { findUserByIdWithProfileSafe } from './db/repositories/users';
 
-const JWT_SECRET = process.env.AUTH_SECRET;
-if (!JWT_SECRET) {
-    throw new Error('Missing required environment variable: AUTH_SECRET');
+function getJwtSecret(): string {
+    const secret = process.env.AUTH_SECRET;
+    if (!secret) {
+        throw new Error('Missing required environment variable: AUTH_SECRET. Please set AUTH_SECRET in your .env file.');
+    }
+    return secret;
 }
 
 const TOKEN_NAME = 'agribridge_token';
@@ -32,12 +35,12 @@ export async function comparePassword(password: string, hash: string): Promise<b
 // ─── JWT helpers ───────────────────────────────────────────────────────────────
 
 export function generateToken(payload: UserPayload): string {
-    return jwt.sign(payload, JWT_SECRET as string, { expiresIn: TOKEN_EXPIRY });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn: TOKEN_EXPIRY });
 }
 
 export function verifyToken(token: string): UserPayload | null {
     try {
-        return jwt.verify(token, JWT_SECRET as string) as UserPayload;
+        return jwt.verify(token, getJwtSecret()) as UserPayload;
     } catch {
         return null;
     }

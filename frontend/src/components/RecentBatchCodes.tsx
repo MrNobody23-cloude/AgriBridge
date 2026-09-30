@@ -42,7 +42,7 @@ export default function RecentBatchCodes({
             const resolved = await Promise.all(
                 codes.map(async (code) => {
                     try {
-                        const res = await fetch(`/api/batches/${encodeURIComponent(code)}`);
+                        const res = await fetch(`/api/batches/${encodeURIComponent(code)}`, { cache: 'no-store' });
                         if (!res.ok) return null;
                         const json = await res.json();
                         return json.success ? code : null;

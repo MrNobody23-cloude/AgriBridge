@@ -33,7 +33,14 @@ export default function RetailerDashboard() {
     try {
       const res = await fetch('/api/batches?status=DELIVERED');
       const json = await res.json();
-      if (json.success) setBatches(json.data.slice(0, 10));
+      if (json.success) {
+        const rawBatches: Batch[] = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.data?.batches)
+            ? json.data.batches
+            : [];
+        setBatches(rawBatches.slice(0, 10));
+      }
     } catch (e) {
       console.error(e);
     } finally {

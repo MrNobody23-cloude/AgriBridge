@@ -32,13 +32,18 @@ export default function FarmerDashboard() {
       const res = await fetch(`/api/batches${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`);
       const json = await res.json();
       if (json.success) {
-        const rows: BatchRow[] = json.data.map((b: ApiBatch) => ({
+        const rawBatches: ApiBatch[] = Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.data?.batches)
+            ? json.data.batches
+            : [];
+        const rows: BatchRow[] = rawBatches.map((b: ApiBatch) => ({
           id: b.batchCode,
           crop: b.product?.name || 'Crop Batch',
-          qty: `${b.quantity.toLocaleString()} kg`,
-          quantity: Number(b.quantity),
+          qty: `${(b.quantity || 0).toLocaleString()} kg`,
+          quantity: Number(b.quantity || 0),
           unit: b.unit || 'kg',
-          harvestDate: new Date(b.harvestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          harvestDate: b.harvestDate ? new Date(b.harvestDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A',
           trustScore: b.trustScore,
           status: b.status,
         }));
@@ -78,7 +83,12 @@ export default function FarmerDashboard() {
 
       const json = await res.json();
       if (json.success) {
-        const newBatchCode = json.data.batch.batchCode;
+        const batchObj = json.data?.batch || json.data;
+        const newBatchCode = batchObj?.batchCode;
+        if (!newBatchCode) {
+          alert('Batch created, but no batch code was returned');
+          return;
+        }
         const verifyUrl = `${window.location.origin}/verify/${newBatchCode}`;
         const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 300, margin: 2 });
 
@@ -93,11 +103,10 @@ export default function FarmerDashboard() {
         setSuccessMsg(
           anchored
             ? `✓ Batch ${newBatchCode} registered and anchored on-chain.`
-            : `✓ Batch ${newBatchCode} registered with a SHA-256 fingerprint${
-                chain?.reason
-                  ? ` — not anchored on-chain (${String(chain.reason).toLowerCase().replace(/_/g, ' ')})`
-                  : ''
-              }.`
+            : `✓ Batch ${newBatchCode} registered with a SHA-256 fingerprint${chain?.reason
+              ? ` — not anchored on-chain (${String(chain.reason).toLowerCase().replace(/_/g, ' ')})`
+              : ''
+            }.`
         );
         setQrModalData({ code: newBatchCode, url: verifyUrl, qrDataUrl });
         fetchBatches();
