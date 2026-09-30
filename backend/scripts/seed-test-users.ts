@@ -1,3 +1,10 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment variables from repo root .env or current working directory .env
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import bcrypt from 'bcryptjs';
 import { disconnectFromDatabase } from '../../frontend/src/lib/db/connection';
 import {

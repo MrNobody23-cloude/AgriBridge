@@ -27,8 +27,6 @@ import mongoose from 'mongoose';
  *    is cached, so ten requests racing on a cold start produce one connection.
  */
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
 interface MongooseCache {
     conn: typeof mongoose | null;
     promise: Promise<typeof mongoose> | null;
@@ -45,8 +43,13 @@ if (process.env.NODE_ENV !== 'production') {
     globalForMongoose.__agribridgeMongoose = cache;
 }
 
+export function getMongoUri(): string | undefined {
+    return process.env.MONGODB_URI;
+}
+
 export function isDatabaseConfigured(): boolean {
-    return Boolean(MONGODB_URI && MONGODB_URI.trim() !== '');
+    const uri = getMongoUri();
+    return Boolean(uri && uri.trim() !== '');
 }
 
 /**
@@ -80,7 +83,9 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
         return cache.conn;
     }
 
-    if (!isDatabaseConfigured()) {
+    const uri = getMongoUri();
+
+    if (!isDatabaseConfigured() || !uri) {
         throw new Error(
             'MONGODB_URI is not set. Point it at a local mongod or a MongoDB Atlas cluster.'
         );
@@ -88,7 +93,7 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
 
     if (!cache.promise) {
         cache.promise = mongoose
-            .connect(MONGODB_URI as string, {
+            .connect(uri, {
                 // One client per process. On Atlas M0 the connection limit is
                 // shared by every instance of the app, so each instance
                 // taking a small share is the only thing that works.
