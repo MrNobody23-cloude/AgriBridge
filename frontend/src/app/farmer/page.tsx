@@ -7,6 +7,24 @@ import type { ApiBatch } from '@/lib/api-types';
 import BatchTable, { BatchRow } from '@/components/BatchTable';
 import QRCode from 'qrcode';
 
+// ─── Types for n8n market listings ───────────────────────────────────────
+
+interface MarketListing {
+  _id: string;
+  product_name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  price?: number | null;
+  price_unit?: string | null;
+  location?: string | null;
+  listing_type?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  farmer_name?: string | null;
+  notes?: string | null;
+  createdAt?: string | null;
+}
+
 export default function FarmerDashboard() {
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +35,11 @@ export default function FarmerDashboard() {
   // a batch has been registered, and a reason string when the batch was not
   // anchored — which is the normal case unless a contract is deployed.
   const [lastChainReason, setLastChainReason] = useState<string | null>(null);
+
+  // n8n Produce Listings state
+  const [listings, setListings] = useState<MarketListing[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [listingsError, setListingsError] = useState<string | null>(null);
 
   // Form State
   const [crop, setCrop] = useState('Alphonso Mango');
@@ -60,9 +83,31 @@ export default function FarmerDashboard() {
     // replacing the table with a spinner the farmer did not ask for.
   }, [searchQuery]);
 
+  const fetchListings = useCallback(async () => {
+    setListingsLoading(true);
+    setListingsError(null);
+    try {
+      const res = await fetch('/api/listings?view=farmer');
+      const json = await res.json();
+      if (json.success) {
+        setListings(json.data?.listings ?? []);
+      } else {
+        setListingsError(json.error?.message || 'Failed to load listings');
+      }
+    } catch (e) {
+      setListingsError(errText(e) || 'Network error loading listings');
+    } finally {
+      setListingsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     Promise.resolve().then(fetchBatches);
   }, [fetchBatches]);
+
+  useEffect(() => {
+    Promise.resolve().then(fetchListings);
+  }, [fetchListings]);
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,7 +262,7 @@ export default function FarmerDashboard() {
         <div className="lg:col-span-1 bg-white rounded-xl p-6 border border-gray-200 shadow-xs space-y-4">
           <div className="border-b border-gray-100 pb-3">
             <h2 className="text-base font-bold text-[#1a1a1a] flex items-center gap-2">
-              <span>📝</span> Register New Crop Batch
+              <span>📋</span> Register New Crop Batch
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Generates a SHA-256 fingerprint for the batch. On-chain anchoring
@@ -456,6 +501,109 @@ export default function FarmerDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── My Produce Listings (from n8n workflow) ──────────────────── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-[#1a1a1a] flex items-center gap-2">
+              <span>🛒</span> My Produce Listings
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Active listings submitted via Telegram. Exporters can see these in the marketplace.
+            </p>
+          </div>
+          <button
+            onClick={fetchListings}
+            className="text-xs font-bold text-[#16a34a] hover:underline flex items-center gap-1"
+          >
+            ↻ Refresh
+          </button>
+        </div>
+
+        {listingsLoading ? (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-xs py-10 flex items-center justify-center gap-2">
+            <span className="w-4 h-4 border-2 border-[#16a34a] border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-gray-500 font-medium">Loading your listings…</span>
+          </div>
+        ) : listingsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700 font-semibold">
+            ⚠️ {listingsError}
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-8 text-center">
+            <p className="text-sm font-semibold text-gray-500">No active listings found.</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Post a produce listing via the AgriBridge Telegram bot and it will appear here automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {listings.map((listing) => {
+              const isTypeSell = (listing.listing_type || 'SELL').toUpperCase() === 'SELL';
+              const displayDate = listing.created_at
+                ? listing.created_at
+                : listing.createdAt
+                  ? new Date(listing.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                  : 'N/A';
+              return (
+                <div
+                  key={listing._id}
+                  className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs hover:shadow-sm transition-shadow"
+                >
+                  {/* Header row */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[#1a1a1a] truncate">{listing.product_name}</p>
+                      {listing.location && (
+                        <p className="text-[11px] text-gray-500 mt-0.5 truncate">📍 {listing.location}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 ml-2 shrink-0">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                          isTypeSell
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {listing.listing_type || 'SELL'}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">
+                        {listing.status || 'active'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="p-2 bg-[#FAFAF7] rounded-lg border border-gray-100">
+                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Quantity</p>
+                      <p className="text-sm font-extrabold text-[#1a1a1a] mt-0.5">
+                        {listing.quantity != null ? `${listing.quantity.toLocaleString()} ${listing.unit || 'kg'}` : '—'}
+                      </p>
+                    </div>
+                    <div className="p-2 bg-[#FAFAF7] rounded-lg border border-gray-100">
+                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Price</p>
+                      <p className="text-sm font-extrabold text-[#16a34a] mt-0.5">
+                        {listing.price != null
+                          ? `₹${listing.price.toLocaleString()}${listing.price_unit ? `/${listing.price_unit}` : ''}`
+                          : 'Not set'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                    <span className="text-[10px] text-gray-400 font-medium">Listed: {displayDate}</span>
+                    <span className="text-[10px] font-bold text-[#16a34a]">● Active</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   );
 }

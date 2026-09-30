@@ -28,5 +28,14 @@
         "tsx": "^4.23.13",
         "typescript": "^5",
         "vitest": "^2.1.9"
+    },
+    "allowScripts": {
+        "@prisma/client@5.22.0": true,
+        "@prisma/engines@5.22.0": true,
+        "esbuild@0.28.2": true,
+        "esbuild@0.21.5": true,
+        "keccak@3.0.4": true,
+        "prisma@5.22.0": true,
+        "secp256k1@4.0.5": true
     }
 }

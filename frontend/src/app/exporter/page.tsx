@@ -1,19 +1,53 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import type { ApiShipment, ApiComplianceResult } from '@/lib/api-types';
 import { errText } from '@/lib/err';
+
+// ─── Types for n8n market listings ───────────────────────────────────────────
+
+interface MarketListing {
+  _id: string;
+  listing_id?: string | null;
+  product?: string | null;
+  product_name?: string;
+  quantity?: number | null;
+  unit?: string | null;
+  price?: number | null;
+  price_unit?: string | null;
+  location?: string | null;
+  listing_type?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  createdAt?: string | null;
+  expires_at?: string | null;
+  contact_name?: string | null;
+  farmer_name?: string | null;
+  phone_number?: string | null;
+  language?: string | null;
+}
+
+const formatListingDate = (l: MarketListing): string => {
+  const raw = l.created_at ?? l.createdAt;
+  if (!raw) return '\u2014';
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime())
+    ? '\u2014'
+    : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 export default function ExporterDashboard() {
   const [shipments, setShipments] = useState<ApiShipment[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Available Produce Listings (from n8n workflow)
+  const [produce, setProduce] = useState<MarketListing[]>([]);
+  const [produceLoading, setProduceLoading] = useState(true);
+  const [produceError, setProduceError] = useState<string | null>(null);
+
   // Modal / Action states
   const [destinationCountry, setDestinationCountry] = useState('UK');
-  // Empty, not 'AG-2847'. The field was pre-filled with a code the exporter
-  // never chose, so submitting the form created a shipment against whatever
-  // batch happened to match — or against nothing.
   const [batchId, setBatchId] = useState('');
   const [quantity, setQuantity] = useState('2400');
   const [creatingShipment, setCreatingShipment] = useState(false);
@@ -43,13 +77,42 @@ export default function ExporterDashboard() {
   };
 
   useEffect(() => {
-    // Deferred to a microtask, and `loading` is never set to `true` here. It
-    // initialises to `true`, so the first paint is already a spinner; a second
-    // render before the fetch resolves is the cascade this avoids. A manual
-    // refresh therefore keeps the current table visible instead of blanking it
-    // to "Loading shipments…" for a list the user was already reading.
     Promise.resolve().then(fetchShipments);
   }, []);
+
+  const fetchProduce = useCallback(async (silent = false) => {
+    if (!silent) {
+      setProduceLoading(true);
+      setProduceError(null);
+    }
+    try {
+      const res = await fetch('/api/listings?view=exporter');
+      const json = await res.json();
+      if (json.success) {
+        setProduce(json.data?.listings ?? []);
+        setProduceError(null);
+      } else if (!silent) {
+        setProduceError(json.error?.message || 'Failed to load produce listings');
+      }
+    } catch (e) {
+      if (!silent) setProduceError(errText(e) || 'Network error loading produce listings');
+    } finally {
+      if (!silent) setProduceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    Promise.resolve().then(() => fetchProduce(false));
+    const interval = setInterval(() => fetchProduce(true), 30000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchProduce(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchProduce]);
 
   const handleCreateShipment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +165,6 @@ export default function ExporterDashboard() {
     e.preventDefault();
     setUploadingCert(true);
     try {
-      // Calculate SHA-256 hash
       const text = certFile ? await certFile.text() : `${certType}_${batchId}_${Date.now()}`;
       const msgBuffer = new TextEncoder().encode(text);
       const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -138,16 +200,7 @@ export default function ExporterDashboard() {
 
   return (
     <DashboardLayout title="Exporter Dashboard">
-      {/* Top Banner Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Banner stats
-            These four tiles read `shipments.length || 6`, a fixed "98.4% RAG
-            Compliance Pass" against a "UK, UAE, USA, Japan" caption, a fixed
-            "14 Verified" certificate count, and a fixed "1 Flagged / MRL
-            Limit Warning". None was measured: no pass rate is computed
-            anywhere, no MRL limit is ever tested, and the two counts were
-            constants that rendered even when the shipment list was empty.
-            The tiles now count what was fetched. */}
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Export Shipments</p>
@@ -207,9 +260,74 @@ export default function ExporterDashboard() {
         </div>
       </div>
 
-      {/* Main Grid: Create Shipment + RAG Checker */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-base font-bold text-[#1a1a1a]">Available Produce</h3>
+          <span className="text-xs font-medium text-gray-500">
+            {produceLoading ? 'Loading listings\u2026' : produceError ? '' : `${produce.length} active listings`}
+          </span>
+        </div>
+
+        {produceLoading ? (
+          <div className="p-8 text-center text-xs text-gray-500">Loading available produce\u2026</div>
+        ) : produceError ? (
+          <div className="p-8 text-center text-xs text-red-700 bg-red-50">
+            <p className="font-semibold">{produceError}</p>
+            <button
+              onClick={() => fetchProduce(false)}
+              className="mt-3 px-3 py-1.5 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-xl hover:bg-red-100"
+            >
+              Retry
+            </button>
+          </div>
+        ) : produce.length === 0 ? (
+          <div className="p-8 text-center text-xs text-gray-500 bg-[#FAFAF7]">
+            No active produce listings yet. New farmer listings will appear here automatically.
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="w-full text-left text-xs text-[#1a1a1a]">
+              <thead className="bg-[#FAFAF7] text-gray-500 font-semibold border-b border-gray-200 uppercase text-[11px] tracking-wider sticky top-0">
+                <tr>
+                  <th className="py-3 px-4">Product</th>
+                  <th className="py-3 px-4">Available Quantity</th>
+                  <th className="py-3 px-4">Price</th>
+                  <th className="py-3 px-4">Farmer / Location</th>
+                  <th className="py-3 px-4">Listed On</th>
+                  <th className="py-3 px-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {produce.map((item, idx) => (
+                  <tr key={item._id || idx} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 font-semibold text-[#1a1a1a] capitalize">{item.product || item.product_name}</td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {item.quantity != null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ''}` : '\u2014'}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-[#16a34a]">
+                      {item.price != null
+                        ? `\u20B9${Number(item.price).toLocaleString('en-IN')} / ${item.unit || item.price_unit || ''}`
+                        : 'Request Quote'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-700">
+                      <span className="font-semibold">{item.contact_name || item.farmer_name || 'Farmer'}</span>
+                      {item.location ? <span className="block text-[11px] text-gray-500">{item.location}</span> : null}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{formatListingDate(item)}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-[#16a34a] capitalize">
+                        {item.status || 'active'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Create Shipment Form */}
         <div className="lg:col-span-1 bg-white rounded-xl p-6 border border-gray-200 shadow-xs space-y-4">
           <div className="border-b border-gray-100 pb-3">
             <h2 className="text-base font-bold text-[#1a1a1a] flex items-center gap-2">
@@ -277,7 +395,6 @@ export default function ExporterDashboard() {
           </form>
         </div>
 
-        {/* AI RAG Compliance Knowledge Checker */}
         <div className="lg:col-span-2 bg-white rounded-xl p-6 border border-gray-200 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
             <div>
@@ -335,7 +452,6 @@ export default function ExporterDashboard() {
             </div>
           )}
 
-          {/* Certificate SHA-256 Hashing Upload */}
           <div className="border-t border-gray-100 pt-4">
             <h3 className="text-xs font-bold text-[#1a1a1a] mb-2">Upload Certificate for SHA-256 Hash Verification</h3>
             <form onSubmit={handleUploadCertificate} className="flex flex-col sm:flex-row gap-2">
@@ -365,7 +481,6 @@ export default function ExporterDashboard() {
         </div>
       </div>
 
-      {/* Shipments Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-xs">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-base font-bold text-[#1a1a1a]">Export Shipment Ledger</h3>
@@ -390,12 +505,6 @@ export default function ExporterDashboard() {
               {shipments.map((ship, idx) => (
                 <tr key={ship._id || idx} className="hover:bg-gray-50">
                   <td className="py-3 px-4 font-mono font-bold text-blue-600">{ship.shipmentCode}</td>
-                  {/* A shipment whose batch relation is missing previously
-                      rendered "AG-2847 / Alphonso Mango", so a row with no
-                      provenance behind it still looked like a traced export.
-                      The code was invented precisely to be looked up later, and
-                      a lookup of a fabricated code cannot succeed. Say the
-                      link is missing instead. */}
                   <td className="py-3 px-4 font-mono font-bold text-[#16a34a]">
                     {ship.batch?.batchCode ?? <span className="text-gray-400 font-medium">No batch linked</span>}
                   </td>

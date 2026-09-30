@@ -55,7 +55,8 @@ export async function POST(req: NextRequest) {
             email: newUser.email,
             name: newUser.name,
             role: newUser.role,
-        });
+            phone: newUser.phone || null,
+        } as any);
 
         const response = successResponse({
             user: {
