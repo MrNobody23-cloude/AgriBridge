@@ -31,7 +31,7 @@ export default function RetailerDashboard() {
 
   const fetchBatches = async () => {
     try {
-      const res = await fetch('/api/batches?status=DELIVERED');
+      const res = await fetch('/api/batches');
       const json = await res.json();
       if (json.success) {
         const rawBatches: Batch[] = Array.isArray(json.data)
@@ -78,9 +78,6 @@ export default function RetailerDashboard() {
   };
 
   const handleSpoilageCheck = async () => {
-    // `scannedBatch` IS the batch — the detail response is flat, not wrapped in
-    // a `batch` key. This guard therefore tested a field that does not exist, so
-    // it always returned early and the spoilage check never ran.
     if (!scannedBatch?.batchCode) return;
     setSpoilageLoading(true);
     try {
@@ -95,6 +92,26 @@ export default function RetailerDashboard() {
       console.error('Spoilage check failed:', e);
     } finally {
       setSpoilageLoading(false);
+    }
+  };
+
+  // Update batch status (e.g., APPROVED or FLAGGED)
+  const handleStatusUpdate = async (code: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/batches/${encodeURIComponent(code)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Refresh list to reflect status change
+        fetchBatches();
+      } else {
+        alert(json.error?.message || 'Failed to update status');
+      }
+    } catch (e) {
+      console.error('Status update error:', e);
     }
   };
 
@@ -238,7 +255,7 @@ export default function RetailerDashboard() {
                 they were the least identifiable strings on the page. Only
                 codes that resolve in the ledger are offered now. */}
             <RecentBatchCodes
-              codes={['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503']}
+              codes={batches.map((b) => b.batchCode).filter(Boolean)}
               onPick={(code) => { setScanCode(code); handleScanVerify(code); }}
             />
             {scanError && <p className="text-xs font-semibold text-red-600">⚠️ {scanError}</p>}
@@ -317,9 +334,17 @@ export default function RetailerDashboard() {
                       <td className="py-3 px-4">
                         <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-[#16a34a]">{batch.status}</span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 flex space-x-2">
                         <button onClick={() => { setScanCode(batch.batchCode); handleScanVerify(batch.batchCode); }}
                           className="text-[11px] font-bold text-blue-600 hover:underline">Verify →</button>
+                        {batch.status !== 'APPROVED' && (
+                          <button onClick={() => handleStatusUpdate(batch.batchCode, 'APPROVED')}
+                            className="text-[11px] font-bold text-green-600 hover:underline">Approve</button>
+                        )}
+                        {batch.status !== 'FLAGGED' && (
+                          <button onClick={() => handleStatusUpdate(batch.batchCode, 'FLAGGED')}
+                            className="text-[11px] font-bold text-red-600 hover:underline">Flag</button>
+                        )}
                       </td>
                     </tr>
                   ))

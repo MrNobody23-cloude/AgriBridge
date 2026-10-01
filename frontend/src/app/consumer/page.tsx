@@ -56,7 +56,7 @@ export default function ConsumerPage() {
     // to substitute a hardcoded code when the field was empty, which meant
     // the "verified" answer on screen was about a batch the consumer never
     // looked up.
-    const batchCode = searchCode.trim();
+    const batchCode = batchData?.batchCode || searchCode.trim();
     if (!batchCode) {
       setError('Enter a batch ID above before asking a question — the assistant answers about a specific batch.');
       return;
@@ -120,7 +120,7 @@ export default function ConsumerPage() {
               to trust. They are now called what they are, and each one is
               only offered if it actually exists in the ledger. */}
           <RecentBatchCodes
-            codes={['AGR-2026-UK-284701', 'AGR-2026-EU-284102', 'AGR-2026-US-283503']}
+            codes={[]}
             onPick={(code) => {
               setSearchCode(code);
               handleVerify(code);

@@ -51,15 +51,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 chainVerification,
                 farmer: farmer
                     ? {
-                          name: farmer.name,
-                          farmerProfile: farmer.farmerProfile
-                              ? {
-                                    farmName: farmer.farmerProfile.farmName,
-                                    location: farmer.farmerProfile.location,
-                                    state: farmer.farmerProfile.state,
-                                }
-                              : null,
-                      }
+                        name: farmer.name,
+                        farmerProfile: farmer.farmerProfile
+                            ? {
+                                farmName: farmer.farmerProfile.farmName,
+                                location: farmer.farmerProfile.location,
+                                state: farmer.farmerProfile.state,
+                            }
+                            : null,
+                    }
                     : null,
             };
         }
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // ─── PATCH /api/batches/[id] ──────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const authResult = await requireAuth(req, ['FARMER', 'EXPORTER', 'TRANSPORTER', 'ADMIN']);
+    const authResult = await requireAuth(req, ['FARMER', 'EXPORTER', 'TRANSPORTER', 'RETAILER', 'ADMIN']);
     if (authResult instanceof NextResponse) return authResult;
     const { user } = authResult;
     const { id } = await params;

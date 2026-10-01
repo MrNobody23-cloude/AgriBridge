@@ -20,6 +20,8 @@ export default function ImporterDashboard() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  // Shipment chosen for the compliance panel — persists after the detail modal closes.
+  const [complianceShipment, setComplianceShipment] = useState<Shipment | null>(null);
 
   // Compliance check
   const [complianceCountry, setComplianceCountry] = useState('UK');
@@ -61,6 +63,7 @@ export default function ImporterDashboard() {
   // choosing a shipment fills in its batch.
   const selectShipment = (ship: Shipment) => {
     setSelectedShipment(ship);
+    setComplianceShipment(ship);
     if (ship.batch?.batchCode) {
       setBatchCodeForCompliance(ship.batch.batchCode);
       setComplianceCountry(ship.destinationCountry || 'UK');
@@ -68,17 +71,20 @@ export default function ImporterDashboard() {
   };
 
   const handleCheckCompliance = async () => {
-    // Screening runs against one batch. With none chosen, there is nothing to
-    // screen, and posting a blank code returned a result for an arbitrary
-    // batch rather than an error.
-    if (!batchCodeForCompliance.trim()) return;
+    // Screening runs against a shipment. With none selected, there is nothing
+    // to screen.
+    if (!batchCodeForCompliance.trim() || !complianceShipment) return;
     setCheckingCompliance(true);
     setComplianceResult(null);
     try {
       const res = await fetch('/api/compliance/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ country: complianceCountry, batchId: batchCodeForCompliance.trim() }),
+        body: JSON.stringify({
+          shipmentId: complianceShipment.shipmentCode || complianceShipment.id,
+          country: complianceCountry,
+          crop: complianceShipment.batch?.product?.name,
+        }),
       });
       const json = await res.json();
       if (json.success) setComplianceResult(json.data);
@@ -163,13 +169,13 @@ export default function ImporterDashboard() {
                 className="w-full text-xs p-2.5 bg-[#FAFAF7] border border-gray-200 rounded-xl mt-1 font-mono" />
             </div>
             <button onClick={handleCheckCompliance}
-              disabled={checkingCompliance || !batchCodeForCompliance.trim()}
+              disabled={checkingCompliance || !batchCodeForCompliance.trim() || !complianceShipment}
               className="w-full py-2.5 bg-[#16a34a] text-white text-xs font-bold rounded-xl hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
               {checkingCompliance ? 'Running RAG Check...' : '⚖️ Run Import Screening'}
             </button>
-            {!batchCodeForCompliance.trim() && (
+            {(!batchCodeForCompliance.trim() || !complianceShipment) && (
               <p className="text-[11px] text-gray-400">
-                No batch selected. Open a shipment above to fill this in.
+                No shipment selected. Click a shipment in the table to fill this in.
               </p>
             )}
           </div>

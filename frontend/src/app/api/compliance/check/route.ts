@@ -12,7 +12,7 @@ import type { ApiSource } from '@/lib/api-types';
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
-    const authResult = await requireAuth(req, ['EXPORTER', 'REGULATOR', 'ADMIN', 'FARMER']);
+    const authResult = await requireAuth(req, ['EXPORTER', 'REGULATOR', 'ADMIN', 'FARMER', 'IMPORTER', 'RETAILER']);
     if (authResult instanceof Response) return authResult;
 
     try {
@@ -101,8 +101,8 @@ export async function POST(req: NextRequest) {
 
         // Parse compliance checks from RAG answer or fallback
         const passed = !answer.toLowerCase().includes('insufficient evidence') &&
-                       !answer.toLowerCase().includes('not compliant') &&
-                       answer.length > 50;
+            !answer.toLowerCase().includes('not compliant') &&
+            answer.length > 50;
 
         // Save compliance checks to DB
         const checks = [
