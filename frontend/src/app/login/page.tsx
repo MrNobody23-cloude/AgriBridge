@@ -2,13 +2,30 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { dashboardForRole } from '@/lib/role-routes';
+import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider';
+
+type DemoAccount = { email: string; role: string; name: string };
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
+    const [demoPassword, setDemoPassword] = useState('');
     const router = useRouter();
+    const { t } = useTranslation();
+
+    React.useEffect(() => {
+        fetch('/api/auth/demo-accounts')
+            .then(async (response) => response.ok ? response.json() : null)
+            .then((result) => {
+                setDemoAccounts(result?.data?.accounts ?? []);
+                setDemoPassword(result?.data?.password ?? '');
+            })
+            .catch(() => setDemoAccounts([]));
+    }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,8 +44,7 @@ export default function LoginPage() {
                 return;
             }
             // Navigate based on role
-            const userRole = data.data.user.role.toLowerCase();
-            router.push(`/${userRole}`);
+            router.replace(dashboardForRole(data.data.user.role));
             router.refresh();
         } catch {
             setError('An error occurred during login');
@@ -85,11 +101,12 @@ export default function LoginPage() {
 
             {/* Right Section - Login Form */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#FAFAF7] relative">
+                <div className="absolute right-5 top-5 z-20"><LanguageSwitcher /></div>
                 {/* Decorative Elements */}
                 <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-green-200 rounded-full blur-[100px] opacity-30"></div>
 
                 <div className="w-full max-w-md glass-panel p-10 rounded-2xl relative z-10">
-                    <h2 className="text-3xl font-extrabold mb-2 text-center text-[#1a1a1a]">Sign In</h2>
+                    <h2 className="text-3xl font-extrabold mb-2 text-center text-[#1a1a1a]">{t('Sign In')}</h2>
                     <p className="text-center text-gray-500 text-sm mb-8">Access your customized workspace</p>
 
                     <form onSubmit={handleLogin} className="space-y-5">
@@ -100,7 +117,7 @@ export default function LoginPage() {
                         )}
 
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Email')}</label>
                             <input
                                 type="email"
                                 value={email}
@@ -112,7 +129,7 @@ export default function LoginPage() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Password')}</label>
                             <input
                                 type="password"
                                 value={password}
@@ -150,6 +167,26 @@ export default function LoginPage() {
                             ) : "Login to Workspace"}
                         </button>
                     </form>
+
+                    {demoAccounts.length > 0 && (
+                        <section className="mt-6 border-t border-gray-200 pt-5" aria-label="Demo account shortcuts">
+                            <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Try a demo account</p>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                {demoAccounts.map((account) => (
+                                    <button
+                                        key={account.email}
+                                        type="button"
+                                        onClick={() => { setEmail(account.email); setPassword(demoPassword); setError(''); }}
+                                        className="rounded-lg border border-gray-200 bg-white/70 px-3 py-2 text-left text-xs font-semibold text-gray-700 transition hover:border-agro-green hover:text-agro-green"
+                                    >
+                                        {account.role.charAt(0) + account.role.slice(1).toLowerCase()}
+                                        <span className="block text-[10px] font-normal text-gray-500">Fill demo credentials</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="mt-2 text-[11px] text-gray-500">Demo password: <code>{demoPassword}</code></p>
+                        </section>
+                    )}
 
                     <div className="mt-8 text-center text-sm font-medium text-gray-600 border-t border-gray-200 pt-6">
                         Don&apos;t have an account?{' '}

@@ -1,0 +1,9 @@
+[shell_environment_policy]
+inherit = "core"
+
+[shell_environment_policy.set]
+ANTHROPIC_BASE_URL = "https://api.apinex.bond"
+ANTHROPIC_AUTH_TOKEN = "sk-apxd550479dcb797adc58819996aca9d13b67487156932e8ef"
+ANTHROPIC_DEFAULT_OPUS_MODEL = "claude/opus-5"
+ANTHROPIC_DEFAULT_SONNET_MODEL = "claude/sonnet-5"
+ANTHROPIC_DEFAULT_HAIKU_MODEL = "deepseek/v4-flash"

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ROLES } from '@/lib/permissions';
+import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider';
 
 export default function RegisterPage() {
     const [name, setName] = useState('');
@@ -21,6 +22,7 @@ export default function RegisterPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { t } = useTranslation();
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -77,9 +79,10 @@ export default function RegisterPage() {
             </div>
 
             {/* Right Section - Registration Form */}
-            <div className="w-full lg:w-2/3 flex items-center justify-center p-8 bg-[#FAFAF7]">
+            <div className="w-full lg:w-2/3 flex items-center justify-center p-8 bg-[#FAFAF7] relative">
+                <div className="absolute right-5 top-5 z-20"><LanguageSwitcher /></div>
                 <div className="w-full max-w-2xl glass-panel p-10 rounded-2xl">
-                    <h2 className="text-2xl font-extrabold mb-2 text-[#1a1a1a]">Create Account</h2>
+                    <h2 className="text-2xl font-extrabold mb-2 text-[#1a1a1a]">{t('Create Account')}</h2>
                     <p className="text-gray-500 text-sm mb-6 border-b border-gray-200 pb-4">Register your organization on AgriBridge AI</p>
 
                     <form onSubmit={handleRegister} className="space-y-5">
@@ -95,14 +98,14 @@ export default function RegisterPage() {
                                 <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-agro-green/50" placeholder="Jane Doe" required />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Email')}</label>
                                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-agro-green/50" placeholder="name@company.com" required />
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
+                                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Password')}</label>
                                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-agro-green/50" required />
                             </div>
                             <div>
@@ -112,7 +115,7 @@ export default function RegisterPage() {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Primary Role</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Primary Role')}</label>
                             <select value={role} onChange={e => setRole(e.target.value)} className="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-agro-green/50">
                                 <option value="FARMER">Farmer</option>
                                 <option value="EXPORTER">Exporter</option>

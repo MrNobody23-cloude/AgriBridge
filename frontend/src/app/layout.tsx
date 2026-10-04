@@ -1,12 +1,6 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  weight: ["400", "500", "600", "700", "800"],
-});
+import { LanguageProvider } from '@/components/LanguageProvider';
 
 export const metadata: Metadata = {
   title: "AgriBridge AI — India's Agricultural Trust Intelligence Platform",
@@ -19,9 +13,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className={`${inter.className} min-h-full flex flex-col bg-[#FAFAF7] text-[#1a1a1a]`}>
-        {children}
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full flex flex-col bg-[#FAFAF7] text-[#1a1a1a]">
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );

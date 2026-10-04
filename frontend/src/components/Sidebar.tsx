@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { hasPermission, Permission, Role } from '@/lib/permissions';
 import type { SessionUser } from '@/lib/session';
+import { ROLE_BY_DASHBOARD } from '@/lib/role-routes';
+import { useTranslation } from '@/components/LanguageProvider';
 
 interface NavItem {
   href: string;
@@ -41,14 +43,19 @@ export default function Sidebar({ user }: { user: SessionUser }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const { t } = useTranslation();
 
   if (!user) return null;
 
   const userRole = user.role as Role;
 
-  // Filter nav items based on permission
+  // A permission such as batch:read is shared across roles; it must not expose
+  // another role's private dashboard. Dashboard links are filtered by role.
   const visibleItems = allNavItems.filter((item) =>
-    item.permission ? hasPermission(userRole, item.permission) : true
+    (ROLE_BY_DASHBOARD[item.href]
+      ? ROLE_BY_DASHBOARD[item.href] === userRole
+      : true) &&
+    (item.permission ? hasPermission(userRole, item.permission) : true)
   );
 
   // Group by section
@@ -72,7 +79,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
 
   return (
     <aside
-      className={`${sidebarWidth} glass-panel border-r-0 border-r-white/20 min-h-screen flex flex-col justify-between py-4 shadow-xl fixed left-0 top-0 bottom-0 z-40 transition-all duration-300 overflow-hidden`}
+      className={`dashboard-sidebar ${sidebarWidth} glass-panel border-r-0 border-r-white/20 min-h-screen flex flex-col justify-between py-4 shadow-xl fixed left-0 top-0 bottom-0 z-40 transition-all duration-300 overflow-hidden`}
     >
       <div className="flex flex-col h-full overflow-hidden">
         {/* Logo + Collapse button */}
@@ -101,7 +108,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
           {grouped.map(({ section, items }) => (
             <div key={section}>
               {!collapsed && (
-                <p className="px-2 mb-2 text-[9px] font-extrabold text-gray-400 uppercase tracking-widest">{section}</p>
+                <p className="px-2 mb-2 text-[9px] font-extrabold text-gray-400 uppercase tracking-widest">{section === 'My Dashboard' ? t('My Dashboard') : t(section || '')}</p>
               )}
               <div className="space-y-1">
                 {items.map((item) => {
@@ -112,14 +119,14 @@ export default function Sidebar({ user }: { user: SessionUser }) {
                       key={item.href}
                       href={item.href}
                       title={collapsed ? item.label : undefined}
-                      className={`flex items-center gap-3 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all group
+                      className={`dashboard-nav-link flex items-center gap-3 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all group
                         ${isActive
                           ? 'bg-white/50 text-agro-green border border-white/60 shadow-sm font-bold'
                           : 'text-gray-600 hover:bg-white/30 hover:text-[#1a1a1a]'
                         }`}
                     >
                       <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-agro-green' : 'text-gray-400 group-hover:text-gray-700'}`} />
-                      {!collapsed && <span className="truncate">{item.label}</span>}
+                      {!collapsed && <span className="truncate">{t(item.label)}</span>}
                     </Link>
                   );
                 })}
@@ -148,7 +155,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
             className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-50/50 transition-colors"
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>}
+            {!collapsed && <span>{loggingOut ? t('Logging out...') : t('Logout')}</span>}
           </button>
         </div>
       </div>

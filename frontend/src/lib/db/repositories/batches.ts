@@ -515,6 +515,16 @@ export async function createSupplyChainEvent(
     return event.toObject() as SupplyChainEventDoc;
 }
 
+export async function createIpfsDocument(input: Omit<IpfsDocumentDoc, '_id' | 'uploadedAt'>): Promise<IpfsDocumentDoc> {
+    await connectToDatabase();
+    const document = await IpfsDocumentModel.findOneAndUpdate(
+        { ipfsCid: input.ipfsCid },
+        { $setOnInsert: { ...input, uploadedAt: new Date() } },
+        { new: true, upsert: true },
+    ).lean<IpfsDocumentDoc>().exec();
+    return document as IpfsDocumentDoc;
+}
+
 /** Record a cached ML prediction against a batch. */
 export interface CreateMlPredictionInput {
     batchId: string;
@@ -552,7 +562,10 @@ export interface CreateBatchInput {
     variety?: string | null;
     quantity: number;
     unit: string;
+    sowingDate?: Date | null;
     harvestDate: Date;
+    actualHarvestDate?: Date | null;
+    harvestStage?: string;
     location: string;
     destinationCountry?: string | null;
     status: string;

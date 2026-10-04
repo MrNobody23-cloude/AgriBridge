@@ -66,13 +66,13 @@ export async function POST(req: NextRequest) {
                 phone: newUser.phone,
                 farmerProfile: newUser.farmerProfile,
             },
-            token,
         });
 
         response.cookies.set({
             name: TOKEN_NAME,
             value: token,
             httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
             path: '/',
             maxAge: 7 * 24 * 60 * 60,
             sameSite: 'lax',

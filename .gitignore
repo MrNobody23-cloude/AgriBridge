@@ -86,6 +86,7 @@ seed.out
 # Vector store (auto-generated)
 ai-service/vectorstore/
 rag/vectorstore/
+backend/ai-service/vectorstore/embeddings.npy
 
 # IPFS upload temp dir
 uploads/
@@ -104,6 +105,8 @@ hardhat/cache/
 # imports is `contracts/`, not this.
 /artifacts/
 /cache/
+/backend/artifacts/
+/backend/cache/
 
 # Debug logs
 npm-debug.log*

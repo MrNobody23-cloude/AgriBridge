@@ -34,10 +34,15 @@ export interface ApiBatch {
     batchCode: string;
     productId?: string;
     product?: ApiProduct | null;
+    variety?: string | null;
     /** Numeric kilograms. The farmer page aggregates on this. */
     quantity: number;
     unit?: string | null;
+    sowingDate?: string | null;
     harvestDate: string;
+    actualHarvestDate?: string | null;
+    harvestStage?: string | null;
+    destinationCountry?: string | null;
     location?: string | null;
     trustScore?: number | null;
     status: BatchStatus;

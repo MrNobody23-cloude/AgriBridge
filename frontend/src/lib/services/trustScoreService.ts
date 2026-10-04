@@ -220,16 +220,18 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
     // 4. Compliance (10) — only when a compliance check was actually run.
     scoreFactor('Regulatory Compliance', 10, 'NO_COMPLIANCE_CHECK', 'No compliance check has been run.', () => {
         const checks = batch.shipments.flatMap((s) => s.complianceChecks);
-        if (checks.length === 0) {
+        const decidedChecks = checks.filter((c) => !['PENDING', 'UNKNOWN', 'NOT_REVIEWED'].includes(c.status.toUpperCase()));
+        if (decidedChecks.length === 0) {
             throw new Error('No compliance check has been recorded for any shipment on this batch.');
         }
-        const failed = checks.filter((c) => c.status === 'MISSING' || c.status === 'FAILED');
+        const passed = decidedChecks.filter((c) => ['PASSED', 'COMPLIANT', 'APPROVED', 'VERIFIED'].includes(c.status.toUpperCase()));
+        const failed = decidedChecks.length - passed.length;
         return {
-            score: 10 * (1 - failed.length / checks.length),
-            desc: `${checks.length - failed.length} of ${checks.length} requirement(s) satisfied.`,
+            score: 10 * (passed.length / decidedChecks.length),
+            desc: `${passed.length} of ${decidedChecks.length} reviewed requirement(s) passed; ${checks.length - decidedChecks.length} pending check(s) excluded.`,
             risk:
-                failed.length > 0
-                    ? `Compliance gap: ${failed.length} requirement(s) missing or failed.`
+                failed > 0
+                    ? `Compliance gap: ${failed} reviewed requirement(s) did not pass.`
                     : undefined,
         };
     });
@@ -256,7 +258,15 @@ export async function calculateTrustScore(batchId: string): Promise<TrustScoreRe
             throw new Error('No supply chain events have been recorded for this batch.');
         }
         // Custody coverage: how much of the lifecycle has actually been walked.
-        const stages = new Set(batch.events.map((e) => e.eventType));
+        const stages = new Set(batch.events.map((event) => {
+            if (event.eventType !== 'FARMER_PROGRESS_UPDATE' || !event.metadata) return event.eventType;
+            try {
+                const metadata = JSON.parse(event.metadata) as { stage?: string };
+                return metadata.stage ? `FARM_STAGE_${metadata.stage}` : event.eventType;
+            } catch {
+                return event.eventType;
+            }
+        }));
         const coverage = Math.min(1, stages.size / 4);
         const criticalFraud = batch.fraudAlerts.filter(
             (f) => f.severity === 'CRITICAL' && f.status !== 'RESOLVED'

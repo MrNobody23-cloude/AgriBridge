@@ -16,6 +16,7 @@ Each agent has real tool calls — not hallucinated responses.
 import logging
 import os
 import time
+import hmac
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -459,8 +460,14 @@ Provide a 3-sentence executive summary for the regulator/exporter. Be concise an
 @router.post("/consumer/answer")
 async def consumer_agent(req: ConsumerAgentRequest, request: Request):
     """Consumer Trust Agent: answer questions about a batch using real data + RAG."""
+    # The browser-facing Next.js API owns database access and constructs the
+    # feed evidence. Do not accept caller-supplied batch facts from the network.
+    expected_key = os.getenv("AI_SERVICE_API_KEY", "")
+    provided_key = request.headers.get("x-agribridge-api-key", "")
+    if not expected_key or not hmac.compare_digest(provided_key, expected_key):
+        raise HTTPException(status_code=401, detail="Trusted AgriBridge API credentials are required")
+
     rag = request.app.state.rag_pipeline
-    llm = _build_agent_llm()
     batch_data = req.batchData or {}
 
     if not batch_data:
@@ -485,33 +492,20 @@ async def consumer_agent(req: ConsumerAgentRequest, request: Request):
         "certificatesVerified": cert_check.get("verified"),
         "totalCertificates": cert_check.get("total"),
         "trustScore": batch_info.get("trustScore"),
+        # These live records are assembled from the requested batch's MongoDB
+        # feed by the authenticated AgriBridge API. Never fill gaps with a
+        # synthetic sample or another user's unrelated records.
+        "knowledgeDocuments": batch_data.get("knowledgeDocuments", []),
+        "chainVerification": batch_data.get("chainVerification", {}),
     }
 
     # RAG for regulation/safety context
     rag_result = await rag.answer(req.query, context)
 
-    # LLM synthesis with batch context
-    if llm:
-        prompt = f"""You are the AgriBridge AI Consumer Trust Agent. A consumer scanned a QR code on their food product and asked:
-
-"{req.query}"
-
-Verified product information:
-- Batch: {req.batchCode}
-- Product: {batch_info.get('product')}
-- Origin: {batch_info.get('location')}
-- Harvest Date: {batch_info.get('harvestDate', '')[:10]}
-- Blockchain Verified: {chain_v.get('verified')}
-- Certificates Verified: {cert_check.get('verified')}/{cert_check.get('total')}
-- Trust Score: {batch_info.get('trustScore')}/100
-
-Regulation context from knowledge base:
-{rag_result.get('answer', '')[:500]}
-
-Answer the consumer's question in plain language (2-3 sentences). Be honest. Do not invent facts not in the data above."""
-        answer = _llm_generate(llm, prompt, rag_result.get("answer", "Unable to answer at this time."))
-    else:
-        answer = rag_result.get("answer", "")
+    # The retrieval pipeline already performs constrained synthesis using its
+    # cited, query-matched records. A second generation pass used to invent
+    # unsupported details and discarded the evidence boundary.
+    answer = rag_result.get("answer", "I could not find supporting live feed records for that question.")
 
     return {
         "success": True,
@@ -519,7 +513,7 @@ Answer the consumer's question in plain language (2-3 sentences). Be honest. Do 
         "answer": answer,
         "evidence": rag_result.get("evidence", []),
         "sources": rag_result.get("sources", []),
-        "confidence": rag_result.get("confidence", 0.8),
-        "toolsUsed": ["get_batch", "verify_blockchain", "check_certificates", "search_regulations", "gemini_synthesis"],
+        "confidence": rag_result.get("confidence", 0.0),
+        "toolsUsed": ["validated_batch_feed_retrieval", "verify_blockchain", "check_certificates"],
         "batchSummary": {"product": batch_info.get("product"), "origin": batch_info.get("location"), "trustScore": batch_info.get("trustScore"), "blockchainVerified": chain_v.get("verified")},
     }

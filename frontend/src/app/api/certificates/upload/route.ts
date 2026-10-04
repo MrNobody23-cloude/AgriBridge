@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
+import { findBatchByIdOrCode, createSupplyChainEvent } from '@/lib/db/repositories/batches';
 import { findDuplicateCertificate, createCertificate } from '@/lib/db/repositories/catalog';
 import { createFraudAlert } from '@/lib/db/repositories/shipments';
 import { certificateUploadSchema } from '@/lib/validators';
@@ -116,8 +116,29 @@ export async function POST(req: NextRequest) {
     if ('status' in session) return session;
 
     try {
+        const contentLength = Number(req.headers.get('content-length') || 0);
+        if (contentLength > 7 * 1024 * 1024) {
+            return errorResponse('Certificate upload must be 5 MB or smaller', 'FILE_TOO_LARGE', 413);
+        }
         const body = await req.json();
         const validated = certificateUploadSchema.parse(body);
+
+        if (validated.fileBase64) {
+            const fileBytes = Buffer.from(validated.fileBase64, 'base64');
+            if (fileBytes.length === 0 || fileBytes.length > 5 * 1024 * 1024) {
+                return errorResponse('Certificate upload must be between 1 byte and 5 MB', 'FILE_TOO_LARGE', 413);
+            }
+            const actualHash = crypto.createHash('sha256').update(fileBytes).digest('hex');
+            if (actualHash.toLowerCase() !== validated.fileHash.toLowerCase()) {
+                return errorResponse('The uploaded file does not match its SHA-256 hash', 'FILE_HASH_MISMATCH', 400);
+            }
+            const isPdf = fileBytes.subarray(0, 5).toString('ascii') === '%PDF-';
+            const isPng = fileBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            const isJpeg = fileBytes[0] === 0xff && fileBytes[1] === 0xd8 && fileBytes[2] === 0xff;
+            if (!isPdf && !isPng && !isJpeg) {
+                return errorResponse('Upload a valid PDF, PNG, or JPEG certificate file', 'UNSUPPORTED_FILE_TYPE', 415);
+            }
+        }
 
         // Verify the batch exists and the uploader is authorized. Only
         // `farmerId` is read from the batch — Prisma's `farmer: { select: { id } }`
@@ -140,7 +161,9 @@ export async function POST(req: NextRequest) {
         // a *different* batch — which is the fraud signal, exactly as before.
         const duplicate = await findDuplicateCertificate(validated.fileHash, batch._id);
 
-        let verificationStatus = 'VERIFIED';
+        // A file hash proves byte integrity only; it does not authenticate the
+        // issuer or certificate. Mark it verified only after IPFS bytes match.
+        let verificationStatus = 'PENDING';
         let duplicateDetected = false;
         let fraudReason = '';
 
@@ -158,7 +181,9 @@ export async function POST(req: NextRequest) {
         if (validated.fileBase64 && !ipfsHash) {
             const pinResult = await pinCertificateToPinata(
                 validated.fileBase64,
-                `${validated.certificateType}_${batch.batchCode}.pdf`,
+                (validated.fileName || `${validated.certificateType}_${batch.batchCode}`)
+                    .replace(/[\\/\0]/g, '_')
+                    .slice(0, 255),
                 {
                     batchCode: batch.batchCode,
                     certificateType: validated.certificateType,
@@ -185,6 +210,7 @@ export async function POST(req: NextRequest) {
                 duplicateDetected = true; // Treat as a trust violation
                 fraudReason = `IPFS content hash mismatch: declared ${validated.fileHash.slice(0, 16)}… but IPFS computed ${ipfsCheck.computedHash?.slice(0, 16) ?? 'unknown'}…`;
             }
+            if (ipfsVerified && !duplicateDetected) verificationStatus = 'VERIFIED';
         }
 
         // ── 4. Persist Certificate ───────────────────────────────────────────────
@@ -195,9 +221,24 @@ export async function POST(req: NextRequest) {
             fileHash: validated.fileHash,
             ipfsHash: ipfsHash,
             issuer: validated.issuer,
-            issueDate: new Date(),
+            issueDate: new Date(`${validated.issueDate}T00:00:00Z`),
             expiryDate: new Date(validated.expiryDate),
             verificationStatus,
+        });
+
+        await createSupplyChainEvent({
+            batchId: batch._id,
+            eventType: 'CERTIFICATE_UPLOADED',
+            actorId: session.user.id,
+            actorRole: session.user.role,
+            location: batch.location,
+            metadata: JSON.stringify({
+                certificateId: certificate._id,
+                certificateType: validated.certificateType,
+                verificationStatus,
+                fileHash: validated.fileHash,
+                ipfsHash: ipfsHash || null,
+            }),
         });
 
         // ── 5. Fraud Alert if suspicious ────────────────────────────────────────
@@ -244,9 +285,9 @@ export async function POST(req: NextRequest) {
             ipfsHashMismatch,
             message: duplicateDetected
                 ? `⚠️ FRAUD ALERT: ${fraudReason} Certificate flagged for Regulator review.`
-                : ipfsHash
-                ? `Certificate uploaded, pinned to IPFS (${ipfsHash}), and SHA-256 verified successfully.`
-                : 'Certificate uploaded and SHA-256 verified successfully.',
+                : ipfsVerified
+                    ? `Certificate bytes were matched against the IPFS copy (${ipfsHash}). Issuer authenticity is not independently confirmed.`
+                    : 'Certificate recorded as pending verification. File integrity or issuer authenticity has not been confirmed.',
         });
     } catch (error: unknown) {
         if (isZodError(error)) {

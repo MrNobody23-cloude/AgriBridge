@@ -27,7 +27,7 @@ export interface AgentResponse {
  * `undefined` at runtime with nothing to notice. Narrowing instead means the
  * label is only used when it really is a non-empty string.
  */
-const FALLBACK_SOURCE = 'AgriBridge RAG Knowledge Base';
+const FALLBACK_SOURCE = 'No validated source retrieved';
 
 /** `err.message` for a `catch (err: unknown)`, without the non-null assertion. */
 function errText(err: unknown): string {
@@ -70,7 +70,10 @@ export async function checkComplianceRAG(
             const data = await res.json() as Record<string, unknown>;
             const answer = String(data.answer || '');
             const sources = (data.sources as unknown[]) || [];
-            const passed = !answer.toLowerCase().includes('insufficient evidence') && answer.length > 20;
+            // RAG retrieval supplies evidence, not an authoritative legal
+            // decision. Keep compliance pending until a versioned ruleset is
+            // integrated and can evaluate it deterministically.
+            const passed = false;
             const checks = [{
                 country,
                 requirement: `Export compliance: ${country}`,
@@ -83,9 +86,9 @@ export async function checkComplianceRAG(
             // worse than one that reports having none, so the confidence
             // figure is only quoted when the service actually supplied one.
             const reportedConfidence = Number(data.confidence || 0);
-            const summary = reportedConfidence > 0
-                ? `RAG Compliance Agent retrieved regulatory evidence for export to ${country}. Confidence: ${Math.round(reportedConfidence * 100)}%.`
-                : `RAG Compliance Agent returned an answer for export to ${country} without reporting a confidence value. Verify the cited source before relying on it.`;
+            const summary = sources.length > 0 && reportedConfidence > 0
+                ? `Retrieved source material for export to ${country}. This is not a compliance clearance; manual review is required.`
+                : `No validated regulatory evidence was retrieved for export to ${country}. Manual review is required.`;
 
             await createAgentLog({
                 agentName: 'Compliance Agent (RAG)',

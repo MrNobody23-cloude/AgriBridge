@@ -1,91 +1,103 @@
 import { NextRequest } from 'next/server';
-import { loadBatchWithRelations, type BatchWithRelations } from '@/lib/db/repositories/batches';
+import { getBatchDetail, type BatchDetail } from '@/lib/db/repositories/batches';
 import { createAgentLog } from '@/lib/db/repositories/agents';
 import { optionalAuth } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const AI_SERVICE_API_KEY = process.env.AI_SERVICE_API_KEY;
 
-function generateGroundedRagAnswer(query: string, batch: BatchWithRelations, chainStatus: string): { answer: string; confidence: number; evidence: string[] } {
-    const q = query.toLowerCase();
-    const productName = batch.product?.name || 'agricultural crop';
-    const variety = batch.variety ? `(${batch.variety})` : '';
-    const farmerName = batch.farmer?.name || 'Registered Farmer';
-    const farmName = batch.farmer?.farmerProfile?.farmName;
-    const farmLocation = batch.farmer?.farmerProfile?.location || batch.location;
-    const harvestDateStr = batch.harvestDate ? new Date(batch.harvestDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'recently';
-    const certCount = batch.certificates.length;
-    const verifiedCerts = batch.certificates.filter(c => c.verificationStatus === 'VERIFIED');
-    const certNames = batch.certificates.map(c => c.certificateType).join(', ');
-    const organicCert = batch.certificates.find(c => c.certificateType.toLowerCase().includes('organic'));
+function feedJson(value: Record<string, unknown>): string {
+    return JSON.stringify(value, (_key, item) => typeof item === 'string' ? item.slice(0, 1000) : item).slice(0, 4000);
+}
 
-    const evidence: string[] = [
-        `Batch ID: ${batch.batchCode}`,
-        `Crop: ${productName} ${variety}`,
-        `Origin: ${batch.location}`,
-        `Farmer: ${farmerName}${farmName ? ` (${farmName})` : ''}`,
-        `Harvest Date: ${harvestDateStr}`,
-        `Blockchain Record: ${chainStatus}`,
-        `Trust Score: ${batch.trustScore}/100`,
-        `Certificates: ${certCount > 0 ? certNames : 'None registered'}`,
-    ];
+function buildKnowledgeDocuments(batch: BatchDetail, chainVerification: { status: string; verified: boolean; blockchainHash: string | null; transactionHash: string | null }) {
+    const docs = [{
+        document_id: `batch:${batch._id}`,
+        title: `Batch ${batch.batchCode} feed record`,
+        source: 'AgriBridge batch feed',
+        verification: 'MongoDB source record',
+        content: feedJson({
+            batchCode: batch.batchCode, product: batch.product?.name, variety: batch.variety,
+            quantity: batch.quantity, unit: batch.unit, harvestDate: batch.harvestDate,
+            origin: batch.location, status: batch.status, trustScore: batch.trustScore,
+            farmerName: batch.farmer?.name,
+        }),
+    }];
 
-    // 1. Organic / Certifications / Safety / Pesticide
-    if (q.includes('organic') || q.includes('certif') || q.includes('pesticide') || q.includes('chemical') || q.includes('phyto') || q.includes('safety') || q.includes('screening')) {
-        if (organicCert) {
-            return {
-                answer: `Yes, batch ${batch.batchCode} (${productName}) is certified organic. It holds an official ${organicCert.certificateType} issued by ${organicCert.issuer || 'regulatory authority'} (Status: ${organicCert.verificationStatus}).`,
-                confidence: 0.95,
-                evidence,
-            };
-        } else if (certCount > 0) {
-            return {
-                answer: `Batch ${batch.batchCode} (${productName}) has ${verifiedCerts.length} verified certificate(s) on record: ${certNames}. Certified by ${batch.certificates[0]?.issuer || 'regulatory authorities'} and registered on-chain with a trust score of ${batch.trustScore}/100.`,
-                confidence: 0.92,
-                evidence,
-            };
-        } else {
-            return {
-                answer: `Batch ${batch.batchCode} (${productName}) from ${batch.location} is registered in the ledger with a Trust Score of ${batch.trustScore}/100 and ${batch.events.length} supply chain audit event(s). Standard safety screening is complete.`,
-                confidence: 0.88,
-                evidence,
-            };
-        }
+    for (const event of batch.events.slice(-50)) {
+        docs.push({
+            document_id: `event:${event._id}`,
+            title: `Supply-chain event ${event.eventType} for ${batch.batchCode}`,
+            source: 'AgriBridge supply-chain event feed',
+            verification: event.blockchainTransactionHash ? 'Database feed; transaction hash recorded, event not independently verified' : 'Database feed; no transaction hash recorded',
+            content: feedJson({
+                eventType: event.eventType, timestamp: event.timestamp, location: event.location,
+                actorRole: event.actor?.role || event.actorRole || 'UNKNOWN',
+                actorName: event.actor?.name || null, metadata: event.metadata || null,
+                transactionHash: event.blockchainTransactionHash || null,
+            }),
+        });
     }
 
-    // 2. Farmer / Origin / Location / Who grew this
-    if (q.includes('farmer') || q.includes('who') || q.includes('grew') || q.includes('origin') || q.includes('where') || q.includes('location') || q.includes('harvest')) {
-        return {
-            answer: `Batch ${batch.batchCode} was grown and harvested by ${farmerName}${farmName ? ` at ${farmName}` : ''} in ${farmLocation}. Harvested on ${harvestDateStr} with a registered batch quantity of ${batch.quantity} ${batch.unit || 'kg'}.`,
-            confidence: 0.96,
-            evidence,
-        };
+    for (const cert of batch.certificates.slice(0, 30)) {
+        docs.push({
+            document_id: `certificate:${cert._id}`,
+            title: `${cert.certificateType} certificate for ${batch.batchCode}`,
+            source: 'AgriBridge certificate feed',
+            verification: `Certificate status: ${cert.verificationStatus}`,
+            content: feedJson({
+                type: cert.certificateType, issuer: cert.issuer, issueDate: cert.issueDate,
+                expiryDate: cert.expiryDate, verificationStatus: cert.verificationStatus,
+                fileHash: cert.fileHash, blockchainHash: cert.blockchainHash,
+            }),
+        });
     }
 
-    // 3. Authenticity / Real / Genuine / Variety / Quality
-    if (q.includes('authentic') || q.includes('genuine') || q.includes('real') || q.includes('fake') || q.includes('quality') || q.includes('rice') || q.includes('mango') || q.includes('crop') || q.includes('variety')) {
-        return {
-            answer: `Yes, batch ${batch.batchCode} is authentic ${productName} ${variety}. It originated from ${batch.location} and is cryptographically verified with a Trust Score of ${batch.trustScore}/100 (${batch.events.length} supply chain audit events recorded).`,
-            confidence: 0.94,
-            evidence,
-        };
+    for (const shipment of batch.shipments.slice(0, 30)) {
+        docs.push({
+            document_id: `shipment:${shipment._id}`,
+            title: `Shipment ${shipment.shipmentCode} for ${batch.batchCode}`,
+            source: 'AgriBridge exporter/importer shipment feed',
+            verification: 'MongoDB shipment feed',
+            content: feedJson({
+                shipmentCode: shipment.shipmentCode, destinationCountry: shipment.destinationCountry,
+                quantity: shipment.quantity, unit: shipment.unit, status: shipment.status,
+                riskScore: shipment.riskScore, estimatedArrival: shipment.estimatedArrival,
+                exporterName: shipment.exporter?.name,
+                compliance: shipment.complianceChecks.map((check) => ({
+                    country: check.country, requirement: check.requirement, status: check.status,
+                    explanation: check.explanation, source: check.source,
+                })),
+            }),
+        });
     }
 
-    // 4. Blockchain / Hash / Proof / Ledger
-    if (q.includes('blockchain') || q.includes('hash') || q.includes('proof') || q.includes('polygon') || q.includes('ledger') || q.includes('audit')) {
-        return {
-            answer: `Batch ${batch.batchCode} is recorded in the immutable supply chain ledger with cryptographic hash ${batch.blockchainHash ? batch.blockchainHash.slice(0, 16) + '...' : 'on-record'}. Blockchain verification status: ${chainStatus}. Trust Score: ${batch.trustScore}/100.`,
-            confidence: 0.95,
-            evidence,
-        };
-    }
+    docs.push({
+        document_id: `blockchain:${batch.batchCode}`,
+        title: `Blockchain verification for ${batch.batchCode}`,
+        source: 'Configured blockchain verification result',
+        verification: chainVerification.status,
+        content: feedJson({
+            status: chainVerification.status, verified: chainVerification.verified,
+            databaseHash: batch.blockchainHash, blockchainHash: chainVerification.blockchainHash,
+            transactionHash: batch.blockchainTransactionHash || chainVerification.transactionHash,
+        }),
+    });
+    return docs;
+}
 
-    // Default grounded synthesis
-    return {
-        answer: `Batch ${batch.batchCode} (${productName} ${variety}) from ${batch.location} was harvested on ${harvestDateStr} by ${farmerName}. Verified with ${verifiedCerts.length} active certificate(s) and a Trust Score of ${batch.trustScore}/100.`,
-        confidence: 0.90,
-        evidence,
-    };
+function retrieveFeedEvidence(query: string, documents: ReturnType<typeof buildKnowledgeDocuments>) {
+    const terms = [...new Set(query.toLowerCase().match(/[a-z0-9-]{3,}/g) || [])];
+    return documents
+        .map((doc) => {
+            const text = `${doc.title} ${doc.content}`.toLowerCase();
+            const matches = terms.filter((term) => text.includes(term)).length;
+            return { doc, score: matches / Math.max(terms.length, 1) };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 4);
 }
 
 export async function POST(req: NextRequest) {
@@ -104,12 +116,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Fetch full batch data to ground the AI answer.
-        const batch = await loadBatchWithRelations(batchId, {
-            eventOrder: 'asc',
-            temperatureLogLimit: 20,
-            shipmentLimit: 0,
-            excludeResolvedFraudAlerts: true,
-        });
+        const batch = await getBatchDetail(batchId);
 
         if (!batch) {
             return successResponse({
@@ -150,16 +157,37 @@ export async function POST(req: NextRequest) {
             fraudAlertsCount: batch.fraudAlerts.length,
         };
 
-        // Fallback RAG response grounded in MongoDB real crop & ledger data
-        const groundedRag = generateGroundedRagAnswer(query, batch, chainV.status);
+        const knowledgeDocuments = buildKnowledgeDocuments(batch, chainV);
+        const localMatches = retrieveFeedEvidence(query, knowledgeDocuments);
+        const groundedRag = {
+            answer: localMatches.length
+                ? `Matching live records for batch ${batch.batchCode}:\n${localMatches.map(({ doc }) => `• ${doc.title} (${doc.verification}): ${doc.content}`).join('\n')}`
+                : 'I could not find a matching validated record for that question. Try asking about the batch origin, a recorded supply-chain event, a certificate, a shipment, or the blockchain verification result.',
+            confidence: localMatches[0]?.score ?? 0,
+            evidence: localMatches.map(({ doc }) => `${doc.title} [${doc.verification}]: ${doc.content}`),
+            sources: localMatches.map(({ doc }) => ({ title: doc.title, source: doc.source, verification: doc.verification })),
+        };
 
         // Call Python AI service for RAG + LLM answer if service is available
         let aiResponse: Record<string, unknown> = {};
-        try {
+        if (AI_SERVICE_API_KEY) try {
             const res = await fetch(`${AI_SERVICE_URL}/api/agents/consumer/answer`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ batchCode: batch.batchCode, query, batchData: batchContext }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(AI_SERVICE_API_KEY ? { 'x-agribridge-api-key': AI_SERVICE_API_KEY } : {}),
+                },
+                body: JSON.stringify({
+                    batchCode: batch.batchCode,
+                    query,
+                    batchData: {
+                        ...batchContext,
+                        blockchainHash: batch.blockchainHash,
+                        blockchainTransactionHash: batch.blockchainTransactionHash,
+                        chainVerification: chainV,
+                        knowledgeDocuments,
+                    },
+                }),
                 signal: AbortSignal.timeout(5000),
             });
             if (res.ok) {
@@ -173,7 +201,7 @@ export async function POST(req: NextRequest) {
         }
 
         const finalAnswer = (aiResponse.answer as string) || groundedRag.answer;
-        const finalConfidence = (aiResponse.confidence as number) || groundedRag.confidence;
+        const finalConfidence = typeof aiResponse.confidence === 'number' ? aiResponse.confidence : groundedRag.confidence;
         const finalEvidence = (aiResponse.evidence as string[]) || groundedRag.evidence;
         const toolsUsed = (aiResponse.toolsUsed as string[]) || ['database_lookup', 'blockchain_verify', 'rag_synthesis'];
 
@@ -192,7 +220,7 @@ export async function POST(req: NextRequest) {
         return successResponse({
             answer: finalAnswer,
             evidence: finalEvidence,
-            sources: (aiResponse.sources as string[]) || [],
+            sources: (aiResponse.sources as string[]) || groundedRag.sources,
             confidence: finalConfidence,
             toolsUsed,
             batchSummary: {

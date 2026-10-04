@@ -1,290 +1,151 @@
 'use client';
 
-import React from 'react';
 import Link from 'next/link';
+import {
+  ArrowDownRight, ArrowRight, BadgeCheck, Boxes, Fingerprint, Globe2,
+  Leaf, PackageCheck, ScanLine, ShieldCheck, Sprout, Store, Truck,
+  UserRound, Workflow,
+} from 'lucide-react';
+import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider';
+
+const roles = [
+  { name: 'Farmers', detail: 'Register harvests and build a verifiable record.', icon: Sprout },
+  { name: 'Exporters', detail: 'Coordinate shipments and destination compliance.', icon: Boxes },
+  { name: 'Importers', detail: 'Review provenance and certificate history.', icon: Globe2 },
+  { name: 'Transporters', detail: 'Record handovers and cold-chain readings.', icon: Truck },
+  { name: 'Retailers', detail: 'Check stock history and freshness signals.', icon: Store },
+  { name: 'Consumers', detail: 'Scan a batch and explore its recorded journey.', icon: UserRound },
+];
 
 export default function LandingPage() {
+  const { t } = useTranslation();
   return (
-    <div className="min-h-screen bg-[#FAFAF7] text-[#1a1a1a]">
-      {/* Top Header */}
-      <header className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#16a34a] text-white text-2xl flex items-center justify-center shadow-xs">
-            🌾
-          </div>
-          <div>
-            <span className="text-lg font-extrabold tracking-tight text-[#1a1a1a]">AgriBridge AI</span>
-            <span className="block text-[10px] font-bold text-[#16a34a] uppercase tracking-wider">Bharat Trust Platform</span>
-          </div>
-        </div>
-        <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-700">
-          <a href="#roles" className="hover:text-[#16a34a] transition-colors">Roles</a>
-          <a href="#how-it-works" className="hover:text-[#16a34a] transition-colors">How it Works</a>
-          <a href="#tech" className="hover:text-[#16a34a] transition-colors">Technology</a>
-        </nav>
-        <Link
-          href="/login"
-          className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-green-200"
-        >
-          Enter Platform →
+    <main className="landing-page min-h-screen overflow-hidden">
+      <header className="landing-header mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
+        <Link href="/" className="flex items-center gap-3" aria-label="AgriBridge AI home">
+          <span className="brand-mark"><Leaf size={21} strokeWidth={2.3} /></span>
+          <span>
+            <span className="block text-[17px] font-extrabold tracking-tight text-[#183d2e]">AgriBridge</span>
+            <span className="block text-[9px] font-bold uppercase tracking-[.2em] text-[#788777]">Trust in every harvest</span>
+          </span>
         </Link>
+        <nav className="hidden items-center gap-8 text-[13px] font-semibold text-[#667568] md:flex">
+          <a href="#platform" className="hover:text-[#275c3f]">{t('Platform')}</a>
+          <a href="#stakeholders" className="hover:text-[#275c3f]">{t('Stakeholders')}</a>
+          <a href="#journey" className="hover:text-[#275c3f]">{t('How it works')}</a>
+        </nav>
+        <div className="flex items-center gap-3"><LanguageSwitcher /><Link href="/login" className="landing-signin">{t('Sign in')} <ArrowRight size={15} /></Link></div>
       </header>
 
-      {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-6 py-12 lg:py-20 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-        {/* Left Column */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 border border-green-200 rounded-full text-xs font-bold text-[#16a34a]">
-            <span>🌱</span> Built Specifically for Indian Agriculture
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-extrabold leading-tight text-[#1a1a1a] tracking-tight">
-            India&apos;s Agricultural <br />
-            Supply Chain <br />
-            <span className="text-[#16a34a]">Finally Has a Brain.</span>
+      <section className="landing-hero mx-auto grid max-w-7xl items-center gap-14 px-5 pb-20 pt-12 sm:px-8 md:pt-20 lg:grid-cols-[1.02fr_.98fr] lg:gap-20 lg:pb-28">
+        <div className="relative z-10">
+          <div className="eyebrow"><span className="eyebrow-dot" /> A clearer path from farm to table</div>
+          <h1 className="mt-7 max-w-2xl text-[clamp(3.2rem,7vw,6.3rem)] font-semibold leading-[.98] tracking-[-.065em] text-[#183d2e]">
+            Good food has a <span className="hero-serif">story.</span>
           </h1>
-          <p className="text-base text-gray-600 leading-relaxed font-medium max-w-xl">
-            AgriBridge AI combines Blockchain, Agentic AI, and Machine Learning to protect 50M+ Indian farmers from supply chain fraud, ensure food safety, and give consumers verifiable trust — from Nashik to New York.
+          <p className="mt-7 max-w-xl text-base leading-8 text-[#68786b] sm:text-lg">
+            AgriBridge brings every handover into view, connecting harvest records, shipment updates and product verification in one trusted workspace.
           </p>
-          <div className="flex flex-wrap gap-4 pt-2">
-            <Link
-              href="/login"
-              className="px-6 py-3.5 bg-[#16a34a] hover:bg-green-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-green-200 text-sm flex items-center gap-2"
-            >
-              Enter Platform →
-            </Link>
-            <a
-              href="#how-it-works"
-              className="px-6 py-3.5 bg-white border-2 border-gray-200 hover:border-[#16a34a] text-[#1a1a1a] font-bold rounded-xl transition-all text-sm flex items-center gap-2 shadow-2xs"
-            >
-              Watch How It Works 🎬
-            </a>
+          <div className="mt-9 flex flex-wrap items-center gap-3">
+            <Link href="/login" className="landing-primary">Explore the platform <ArrowRight size={17} /></Link>
+            <a href="#journey" className="landing-secondary">See how it works <ArrowDownRight size={16} /></a>
+          </div>
+          <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-[#e4e9df] pt-6 text-xs font-medium text-[#718075]">
+            <span className="inline-flex items-center gap-2"><Fingerprint size={15} className="text-[#4c7958]" /> Traceable batch records</span>
+            <span className="inline-flex items-center gap-2"><ShieldCheck size={15} className="text-[#4c7958]" /> Evidence-led verification</span>
           </div>
         </div>
 
-        {/* Right Column: The lifecycle, not a chain state
-            This panel previously rendered a hardcoded block height
-            ("Block #1849204") under a "Live Polygon Blockchain Supply Chain"
-            header with a pulsing dot, and a literal six-node array naming
-            Rajesh Kumar of Nashik, APMC Nashik Hub, AgriPro Global Ltd and
-            Al Maya Supermarket, each with its own invented 0x hash and a green
-            ✓. A visitor had no way to tell any of it from a real lookup. It
-            is now the set of roles a batch actually moves through, with no
-            hashes, no block number, and no verification tick. */}
-        <div className="lg:col-span-6 bg-white p-6 rounded-2xl border border-gray-200 shadow-md space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-            <span className="text-xs font-extrabold text-[#1a1a1a] uppercase tracking-wider">
-              One batch, end to end
-            </span>
-            <span className="text-[11px] text-gray-400">6 handover roles</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 relative">
-            {[
-              { icon: '🌾', title: 'Farmer', desc: 'Registers the harvest' },
-              { icon: '⚖️', title: 'Mandi', desc: 'Aggregates and grades' },
-              { icon: '📦', title: 'Exporter', desc: 'Prepares the shipment' },
-              { icon: '🚢', title: 'Transporter', desc: 'Holds the cold chain' },
-              { icon: '🏪', title: 'Retailer', desc: 'Shelves the produce' },
-              { icon: '👤', title: 'Consumer', desc: 'Scans and checks' },
-            ].map((node) => (
-              <div
-                key={node.title}
-                className="bg-[#FAFAF7] p-3 rounded-xl border border-gray-200 hover:border-[#16a34a] transition-all relative group shadow-2xs"
-              >
-                <div className="text-2xl mb-1">{node.icon}</div>
-                <p className="text-xs font-extrabold text-[#1a1a1a]">{node.title}</p>
-                <p className="text-[10px] text-gray-500 font-medium truncate">{node.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-[#FAFAF7] p-3 rounded-xl border border-gray-200 flex items-center justify-between text-xs">
-            <span className="font-semibold text-gray-600">
-              Every batch gets a SHA-256 fingerprint. Whether it reaches a
-              public chain depends on deployment — see <code className="font-mono">GET /api/health</code>.
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Capabilities Bar
-          This previously advertised "₹2.3Cr Farmer Earnings Protected", "2.3M
-          Batches on Blockchain", a "99.2% Fraud Detection Rate" and "47 Export
-          Countries". None of the four came from anywhere: there is no revenue
-          model, no payment tracking, and no chain has ever been written to in
-          this deployment. Real counts are shown in the page's own dashboard
-          views, which read from the API. */}
-      <section className="bg-[#16a34a] text-white py-6 shadow-md">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">8</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Supply Chain Roles</p>
-          </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">6</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Trained ML Agents</p>
-          </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">6</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Trust Factors, Evidence-Gated</p>
-          </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">100%</p>
-            <p className="text-xs font-medium text-green-100 uppercase tracking-wider mt-0.5">Authorization Enforced Server-Side</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Role Selection Section */}
-      <section id="roles" className="max-w-7xl mx-auto px-6 py-16 space-y-8">
-        <div className="text-center max-w-2xl mx-auto space-y-2">
-          <h2 className="text-3xl font-extrabold text-[#1a1a1a] tracking-tight">Who are you in the supply chain?</h2>
-          <p className="text-sm text-gray-600 font-medium">
-            AgriBridge AI provides specialized dashboards engineered for each stakeholder.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[
-            {
-              emoji: '🌾',
-              role: 'Farmer',
-              desc: 'Register batches, track earnings, get AI quality advice',
-              href: '/login',
-            },
-            {
-              emoji: '📦',
-              role: 'Exporter',
-              desc: 'Verify compliance, detect fraud, manage shipments',
-              href: '/login',
-            },
-            {
-              emoji: '🚢',
-              role: 'Importer',
-              desc: 'Validate certificates, verify authenticity',
-              href: '/login',
-            },
-            {
-              emoji: '🏪',
-              role: 'Retailer',
-              desc: 'Prioritize batches, reduce food waste',
-              href: '/login',
-            },
-            {
-              emoji: '👤',
-              role: 'Consumer',
-              desc: "Scan QR, verify your food's journey",
-              href: '/login',
-            },
-            {
-              emoji: '🏛️',
-              role: 'Regulator',
-              desc: 'Monitor fraud alerts, audit supply chains',
-              href: '/login',
-            },
-          ].map((card, i) => (
-            <Link
-              key={i}
-              href={card.href}
-              className="bg-white p-6 rounded-xl border border-gray-200 hover:border-[#16a34a] hover:shadow-md transition-all group flex flex-col justify-between"
-            >
+        <div className="hero-visual relative mx-auto w-full max-w-[590px]">
+          <div className="hero-halo" />
+          <div className="hero-card relative z-10">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-4xl mb-3">{card.emoji}</div>
-                <h3 className="text-lg font-bold text-[#1a1a1a] group-hover:text-[#16a34a] transition-colors flex items-center justify-between">
-                  {card.role}
-                  <span className="text-base text-gray-400 group-hover:text-[#16a34a] group-hover:translate-x-1 transition-all">→</span>
-                </h3>
-                <p className="text-xs text-gray-600 mt-2 font-medium leading-relaxed">{card.desc}</p>
+                <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#879487]">Journey overview</p>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-[#1d3426]">One batch, connected</h2>
               </div>
-              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-[#16a34a]">
-                <span>Enter Dashboard</span>
-                <span>→</span>
+              <span className="record-pill"><span /> Trace record</span>
+            </div>
+            <div className="mt-8 grid grid-cols-3 gap-3">
+              {[
+                { label: 'Origin', title: 'Harvest', icon: Sprout, state: 'Recorded' },
+                { label: 'Movement', title: 'In transit', icon: Truck, state: 'Updated' },
+                { label: 'Destination', title: 'Verified', icon: BadgeCheck, state: 'Ready to scan' },
+              ].map(({ label, title, icon: Icon, state }, index) => (
+                <div className={`journey-step ${index === 2 ? 'journey-step-final' : ''}`} key={label}>
+                  <div className="journey-icon"><Icon size={19} /></div>
+                  <span className="mt-5 block text-[9px] font-bold uppercase tracking-[.15em] text-[#96a095]">{label}</span>
+                  <span className="mt-1 block text-sm font-semibold text-[#26392b]">{title}</span>
+                  <span className="mt-2 block text-[10px] font-medium text-[#768278]">{state}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#f4f6f0] px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <span className="fingerprint-icon"><Fingerprint size={18} /></span>
+                <div><p className="text-xs font-semibold text-[#304234]">A record at every step</p><p className="mt-0.5 text-[10px] text-[#788579]">Batch history is easy to follow</p></div>
               </div>
+              <ScanLine size={19} className="text-[#53775b]" />
+            </div>
+          </div>
+          <div className="floating-note"><PackageCheck size={17} /><span><strong>From harvest</strong><small>to verified product</small></span></div>
+          <div className="visual-caption">A shared view across the supply chain</div>
+        </div>
+      </section>
+
+      <section id="platform" className="platform-band">
+        <div className="mx-auto grid max-w-7xl gap-8 px-5 py-9 sm:px-8 md:grid-cols-[1.15fr_repeat(3,1fr)] md:items-center">
+          <div><p className="text-[10px] font-bold uppercase tracking-[.19em] text-[#bdceb7]">Built around trust</p><p className="mt-2 max-w-xs text-sm leading-6 text-white/75">Useful signals, organized around the real journey of food.</p></div>
+          {[
+            { value: '8', title: 'supply chain roles' },
+            { value: '6', title: 'trust factors' },
+            { value: '1', title: 'connected record' },
+          ].map((item) => <div className="platform-stat" key={item.title}><span>{item.value}</span><p>{item.title}</p></div>)}
+        </div>
+      </section>
+
+      <section id="stakeholders" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-28">
+        <div className="section-heading">
+          <div><p className="section-kicker">Made for the whole chain</p><h2>One platform. Every perspective.</h2></div>
+          <p>Each participant gets a focused workspace while the product history stays connected from origin to destination.</p>
+        </div>
+        <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {roles.map(({ name, detail, icon: Icon }, index) => (
+            <Link href="/login" className="role-card group" key={name}>
+              <span className="role-index">0{index + 1}</span>
+              <span className="role-icon"><Icon size={20} /></span>
+              <span className="role-content"><strong>{name}</strong><small>{detail}</small></span>
+              <ArrowRight size={17} className="role-arrow" />
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Technology Pillars */}
-      <section id="tech" className="bg-white py-16 border-y border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 space-y-10">
-          <div className="text-center max-w-xl mx-auto space-y-2">
-            <h2 className="text-3xl font-extrabold text-[#1a1a1a] tracking-tight">Technology Pillars</h2>
-            <p className="text-sm text-gray-600 font-medium">Under the hood of India&apos;s most advanced agritech trust engine</p>
+      <section id="journey" className="journey-section">
+        <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[.85fr_1.15fr] lg:items-center lg:py-24">
+          <div>
+            <p className="section-kicker">A more legible supply chain</p>
+            <h2 className="mt-4 max-w-lg text-4xl font-semibold leading-tight tracking-[-.045em] text-[#183d2e] sm:text-5xl">From scattered updates to a shared story.</h2>
+            <p className="mt-5 max-w-md text-sm leading-7 text-[#708074]">AgriBridge makes it easier to follow batch events, check supporting evidence, and understand what has—and has not—been verified.</p>
+            <Link href="/register" className="journey-link">Create your workspace <ArrowRight size={16} /></Link>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="journey-list">
             {[
-              {
-                icon: '🔗',
-                title: 'Blockchain (Polygon)',
-                desc: 'Batch fingerprints anchored on-chain when a contract is deployed',
-              },
-              {
-                icon: '🤖',
-                title: 'Trained ML Agents',
-                desc: '6 trained classifiers scoring spoilage, quality, fraud and trust',
-              },
-              {
-                icon: '🧠',
-                title: 'Machine Learning',
-                desc: 'XGBoost and Isolation Forest models with SHAP attributions',
-              },
-              {
-                icon: '📚',
-                title: 'RAG Compliance',
-                desc: 'Retrieval over a pinned compliance corpus, with citations',
-              },
-            ].map((pillar, i) => (
-              <div key={i} className="bg-[#FAFAF7] p-6 rounded-xl border border-gray-200 hover:border-[#16a34a] transition-all">
-                <div className="text-3xl mb-3">{pillar.icon}</div>
-                <h3 className="text-sm font-extrabold text-[#1a1a1a]">{pillar.title}</h3>
-                <p className="text-xs text-gray-600 mt-2 font-medium leading-relaxed">{pillar.desc}</p>
-              </div>
+              { n: '01', title: 'Register a harvest', text: 'Give each batch a clear starting point and identity.', icon: Leaf },
+              { n: '02', title: 'Record each handover', text: 'Bring shipment, inspection and cold-chain updates together.', icon: Workflow },
+              { n: '03', title: 'Verify with context', text: 'Let partners and consumers review the available history.', icon: ScanLine },
+            ].map(({ n, title, text, icon: Icon }) => (
+              <div className="journey-row" key={n}><span className="journey-number">{n}</span><span className="journey-row-icon"><Icon size={18} /></span><span className="min-w-0 flex-1"><strong>{title}</strong><small>{text}</small></span><ArrowRight size={16} className="text-[#8c9a8d]" /></div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="how-it-works" className="max-w-7xl mx-auto px-6 py-16 space-y-10">
-        <div className="text-center max-w-xl mx-auto space-y-2">
-          <h2 className="text-3xl font-extrabold text-[#1a1a1a] tracking-tight">How It Works</h2>
-          <p className="text-sm text-gray-600 font-medium">4 seamless steps from farm harvest to consumer trust</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[
-            { step: '1', icon: '🌾', title: 'Farm Registration', desc: 'Farmer registers a batch and receives a SHA-256 fingerprint' },
-            { step: '2', icon: '🤖', title: 'AI Assessment', desc: '6 trained agents score the batch as events and readings arrive' },
-            { step: '3', icon: '📊', title: 'Trust Scoring', desc: 'Six weighted factors, each gated on the evidence behind it' },
-            { step: '4', icon: '📱', title: 'Consumer QR Scan', desc: 'Consumer scans a QR to read the recorded history and its trust score' },
-          ].map((item, i) => (
-            <div key={i} className="bg-white p-6 rounded-xl border border-gray-200 relative shadow-2xs">
-              <div className="w-8 h-8 rounded-full bg-green-100 text-[#16a34a] font-extrabold text-xs flex items-center justify-center mb-3">
-                {item.step}
-              </div>
-              <div className="text-2xl mb-2">{item.icon}</div>
-              <h3 className="text-sm font-bold text-[#1a1a1a]">{item.title}</h3>
-              <p className="text-xs text-gray-600 mt-1.5 font-medium leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-[#1a1a1a] text-white py-12 border-t border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#16a34a] text-white text-xl flex items-center justify-center">🌾</div>
-            <div>
-              <span className="font-extrabold text-base text-white">AgriBridge AI</span>
-              <p className="text-xs text-gray-400">Bharat Agricultural Trust Intelligence</p>
-            </div>
-          </div>
-          <p className="text-xs text-gray-400">© 2026 AgriBridge AI Platform. All rights reserved.</p>
-        </div>
+      <footer className="landing-footer mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 text-xs text-[#7a897d] sm:px-8 md:flex-row md:items-center md:justify-between">
+        <Link href="/" className="flex items-center gap-2 font-semibold text-[#385542]"><span className="brand-mark brand-mark-small"><Leaf size={15} /></span> AgriBridge AI</Link>
+        <span>Transparent records for a more connected food system.</span>
+        <Link href="/login" className="font-semibold text-[#385542] hover:text-[#1b4b34]">Sign in <ArrowRight size={13} className="inline" /></Link>
       </footer>
-    </div>
+    </main>
   );
 }

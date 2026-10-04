@@ -6,9 +6,9 @@ import {
     deleteBatchCascade,
     createSupplyChainEvent,
 } from '@/lib/db/repositories/batches';
-import { findProductById } from '@/lib/db/repositories/catalog';
+import { findProductById, findProductByNameInsensitive, createProduct } from '@/lib/db/repositories/catalog';
 import { requireAuth, optionalAuth } from '@/lib/auth';
-import { verifyBatchOnChain } from '@/lib/blockchain';
+import { verifyBatchOnChain, generateBatchHash, registerBatchOnChain } from '@/lib/blockchain';
 import { calculateTrustScore } from '@/lib/services/trustScoreService';
 import { successResponse, errorResponse } from '@/lib/response';
 import { createAuditLog } from '@/lib/auditLog';
@@ -25,6 +25,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         if (!batch) {
             return errorResponse(`Batch ${id} not found`, 'BATCH_NOT_FOUND', 404);
+        }
+
+        if (user?.role === 'FARMER' && batch.farmerId !== user.id) {
+            return errorResponse('You can only view your own batch records.', 'FORBIDDEN', 403);
         }
 
         // Blockchain verification
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // ─── PATCH /api/batches/[id] ──────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-    const authResult = await requireAuth(req, ['FARMER', 'EXPORTER', 'TRANSPORTER', 'RETAILER', 'ADMIN']);
+    const authResult = await requireAuth(req, ['FARMER']);
     if (authResult instanceof NextResponse) return authResult;
     const { user } = authResult;
     const { id } = await params;
@@ -83,36 +87,88 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const batch = await findBatchByIdOrCode(id);
         if (!batch) return errorResponse(`Batch ${id} not found`, 'BATCH_NOT_FOUND', 404);
 
-        // FARMER can only update their own batch
-        if (user.role === 'FARMER' && batch.farmerId !== user.id) {
+        if (batch.farmerId !== user.id) {
             return errorResponse('You can only update your own batches', 'FORBIDDEN', 403);
         }
 
         const body = await req.json();
-        const allowedFields = ['status', 'destinationCountry', 'variety', 'notes'];
+        const allowedFields = ['quantity', 'unit', 'harvestDate', 'sowingDate', 'location', 'destinationCountry', 'variety'];
         const updateData: Record<string, unknown> = {};
         for (const field of allowedFields) {
             if (body[field] !== undefined) updateData[field] = body[field];
         }
 
+        const productBefore = await findProductById(batch.productId);
+        const hashedFieldsChanged =
+            (body.crop !== undefined && String(body.crop).trim() !== (productBefore?.name || '')) ||
+            (body.variety !== undefined && String(body.variety) !== (batch.variety || '')) ||
+            (body.quantity !== undefined && Number(body.quantity) !== batch.quantity) ||
+            (body.unit !== undefined && String(body.unit) !== batch.unit) ||
+            (body.sowingDate !== undefined && (body.sowingDate ? new Date(String(body.sowingDate)).getTime() : null) !== (batch.sowingDate?.getTime() ?? null)) ||
+            (body.harvestDate !== undefined && new Date(String(body.harvestDate)).getTime() !== batch.harvestDate.getTime()) ||
+            (body.location !== undefined && String(body.location) !== batch.location) ||
+            (body.destinationCountry !== undefined && String(body.destinationCountry) !== (batch.destinationCountry || ''));
+        if (hashedFieldsChanged && batch.blockchainTransactionHash) {
+            return errorResponse('Registration details are locked after on-chain registration. Add a dated field update to preserve the original proof.', 'BATCH_PROOF_IMMUTABLE', 409);
+        }
+        for (const field of ['quantity', 'harvestDate', 'sowingDate']) {
+            if (updateData[field] !== undefined) {
+                if (field === 'sowingDate' && (updateData[field] === '' || updateData[field] === null)) { updateData[field] = null; continue; }
+                if (field === 'quantity') {
+                    const quantity = Number(updateData[field]);
+                    if (!Number.isFinite(quantity) || quantity <= 0) return errorResponse('Quantity must be greater than zero.', 'VALIDATION_ERROR', 400);
+                    updateData[field] = quantity;
+                } else {
+                    const date = new Date(String(updateData[field]));
+                    if (Number.isNaN(date.getTime())) return errorResponse(`Invalid ${field}.`, 'VALIDATION_ERROR', 400);
+                    updateData[field] = date;
+                }
+            }
+        }
+        if (body.unit !== undefined) {
+            if (typeof body.unit !== 'string' || !body.unit.trim() || body.unit.trim().length > 32) return errorResponse('Unit must be 1–32 characters.', 'VALIDATION_ERROR', 400);
+            updateData.unit = body.unit.trim();
+        }
+        if (body.crop !== undefined) {
+            if (typeof body.crop !== 'string' || !body.crop.trim() || body.crop.trim().length > 100) return errorResponse('Crop name must be 1–100 characters.', 'VALIDATION_ERROR', 400);
+            let product = await findProductByNameInsensitive(body.crop.trim());
+            if (!product) product = await createProduct({ name: body.crop.trim(), category: 'Agriculture', description: `${body.crop.trim()} — registered on AgriBridge AI platform` });
+            updateData.productId = product._id;
+        }
+        if (body.variety !== undefined && (typeof body.variety !== 'string' || body.variety.length > 100)) return errorResponse('Variety must be 100 characters or fewer.', 'VALIDATION_ERROR', 400);
+        if (body.destinationCountry !== undefined && (typeof body.destinationCountry !== 'string' || body.destinationCountry.length > 100)) return errorResponse('Destination must be 100 characters or fewer.', 'VALIDATION_ERROR', 400);
+        if (body.variety !== undefined) updateData.variety = String(body.variety).trim();
+        if (body.location !== undefined && (typeof body.location !== 'string' || !body.location.trim() || body.location.length > 200)) return errorResponse('Location must be 1–200 characters.', 'VALIDATION_ERROR', 400);
+
+        const productAfter = body.crop ? await findProductById(String(updateData.productId)) : productBefore;
+        if (hashedFieldsChanged) {
+            const hasSowingDateUpdate = Object.prototype.hasOwnProperty.call(updateData, 'sowingDate');
+            const hash = generateBatchHash({ batchCode: batch.batchCode, farmerId: batch.farmerId, crop: productAfter?.name || productBefore?.name || '', variety: String(updateData.variety ?? batch.variety ?? ''), quantity: Number(updateData.quantity ?? batch.quantity), unit: String(updateData.unit ?? batch.unit ?? 'kg'), sowingDate: hasSowingDateUpdate ? updateData.sowingDate instanceof Date ? updateData.sowingDate.toISOString() : null : batch.sowingDate?.toISOString(), harvestDate: new Date(String(updateData.harvestDate ?? batch.harvestDate)).toISOString(), location: String(updateData.location ?? batch.location), destinationCountry: String(updateData.destinationCountry ?? batch.destinationCountry ?? '') });
+            const chain = await registerBatchOnChain(batch.batchCode, hash);
+            updateData.blockchainHash = hash;
+            updateData.blockchainTransactionHash = chain.transactionHash;
+            updateData.blockchainMode = chain.mode;
+        }
+        const effectiveSowingDate = Object.prototype.hasOwnProperty.call(updateData, 'sowingDate') ? updateData.sowingDate as Date | null : batch.sowingDate;
+        const effectiveHarvestDate = updateData.harvestDate instanceof Date ? updateData.harvestDate : batch.harvestDate;
+        if (effectiveSowingDate && effectiveSowingDate > effectiveHarvestDate) return errorResponse('Sowing date cannot be later than expected harvest.', 'VALIDATION_ERROR', 400);
+
         const updated = await updateBatch(batch._id, { ...updateData, updatedAt: new Date() });
         // The Prisma `include: { product: true }` re-attached the product after
         // the write. Callers read `updated.product.name`, so re-attach it the
         // same way rather than changing the response shape.
-        const product = await findProductById(batch.productId);
+        const product = await findProductById(updated?.productId || batch.productId);
 
-        // Record supply chain event if status changed
-        if (body.status && body.status !== batch.status) {
+        if (Object.keys(updateData).length > 0) {
             await createSupplyChainEvent({
                 batchId: batch._id,
-                eventType: `STATUS_CHANGED_TO_${body.status.toUpperCase().replace(/\s+/g, '_')}`,
+                eventType: 'BATCH_PROFILE_UPDATED',
                 actorId: user.id,
-                location: body.location || batch.location,
-                metadata: JSON.stringify({ from: batch.status, to: body.status }),
+                actorRole: user.role,
+                location: String(updateData.location || batch.location),
+                metadata: JSON.stringify({ fields: Object.keys(updateData), blockchainHashUpdated: Boolean(updateData.blockchainHash) }),
             });
-
-            // Recalculate trust score
-            calculateTrustScore(batch._id).catch(console.error);
+            if (hashedFieldsChanged) calculateTrustScore(batch._id).catch(console.error);
         }
 
         await createAuditLog({

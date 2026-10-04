@@ -98,11 +98,15 @@ export function generateBatchHash(payload: {
     batchCode: string;
     farmerId: string;
     crop: string;
+    variety?: string | null;
     quantity: number;
+    unit?: string | null;
+    sowingDate?: string | null;
     harvestDate: string;
     location: string;
+    destinationCountry?: string | null;
 }): string {
-    const rawString = `${payload.batchCode}|${payload.farmerId}|${payload.crop}|${payload.quantity}|${payload.harvestDate}|${payload.location}`;
+    const rawString = `${payload.batchCode}|${payload.farmerId}|${payload.crop}|${payload.variety || ''}|${payload.quantity}|${payload.unit || 'kg'}|${payload.sowingDate || ''}|${payload.harvestDate}|${payload.location}|${payload.destinationCountry || ''}`;
     return '0x' + crypto.createHash('sha256').update(rawString).digest('hex');
 }
 

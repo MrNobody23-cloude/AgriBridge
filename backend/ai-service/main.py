@@ -72,7 +72,7 @@ app = FastAPI(
     - XGBoost spoilage prediction with SHAP explanations
     - Quality and shelf-life prediction
     - Isolation Forest anomaly/fraud detection
-    - RAG-based regulatory compliance (Gemini + FAISS)
+    - Batch-scoped retrieval over validated platform feed records; optional Gemini synthesis
     - LangGraph multi-agent orchestration
     - IPFS document upload via Pinata
     """,
@@ -126,6 +126,9 @@ def root():
 
 if __name__ == "__main__":
     import uvicorn
-    host = os.getenv("AI_SERVICE_HOST", "0.0.0.0")
+    # Bind loopback by default: Next.js calls the AI service server-to-server,
+    # so a local development process does not need to listen on the LAN.
+    # Container deployments should explicitly set AI_SERVICE_HOST=0.0.0.0.
+    host = os.getenv("AI_SERVICE_HOST", "127.0.0.1")
     port = int(os.getenv("AI_SERVICE_PORT", "8000"))
     uvicorn.run("main:app", host=host, port=port, reload=True)

@@ -92,6 +92,9 @@ jobs:
           MONGODB_URI: "mongodb://127.0.0.1:27017/agribridge_ai_test"
           AUTH_SECRET: "test-secret-for-ci-only-not-production"
 
+      - name: Run smart contract tests
+        run: npm run test:contracts
+
   # ── Build ──────────────────────────────────────────────────────────────────
   build-frontend:
     name: Build Next.js
@@ -127,7 +130,9 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/ai-service/requirements.txt
+          pip install -r backend/ai-service/requirements-dev.txt
+      - name: Run AI service tests
+        run: python -m pytest -c backend/ai-service/pytest.ini backend/ai-service/tests --tb=short
       - name: Import the agent modules
         run: |
           python - <<'PY'

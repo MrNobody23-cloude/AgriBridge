@@ -5,11 +5,40 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { errText } from '@/lib/err';
 import type { ApiFraudAlert } from '@/lib/api-types';
 
+interface PendingCertificate { _id: string; certificateType: string; issuer: string; fileHash: string; fileUrl?: string; issueDate: string; expiryDate: string; batch?: { batchCode: string } | null; }
+
 export default function RegulatorDashboard() {
   const [alerts, setAlerts] = useState<ApiFraudAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [certificates, setCertificates] = useState<PendingCertificate[]>([]);
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [certificateLoading, setCertificateLoading] = useState<string | null>(null);
+  const [certificateError, setCertificateError] = useState('');
+
+  const fetchCertificates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/regulator/certificates');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) setCertificates(json.data);
+      else setCertificateError(json.error?.message || 'Unable to load pending certificates');
+    } catch { setCertificateError('Unable to load pending certificates'); }
+  }, []);
+
+  const reviewCertificate = async (certificateId: string, decision: 'VERIFIED' | 'REJECTED') => {
+    const notes = reviewNotes[certificateId]?.trim() || '';
+    if (notes.length < 10) { setCertificateError('Add at least 10 characters of review notes before deciding.'); return; }
+    setCertificateLoading(certificateId);
+    setCertificateError('');
+    try {
+      const res = await fetch('/api/regulator/certificates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ certificateId, decision, notes }) });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || 'Review failed');
+      setCertificates((items) => items.filter((item) => item._id !== certificateId));
+    } catch (error) { setCertificateError(error instanceof Error ? error.message : 'Review failed'); }
+    finally { setCertificateLoading(null); }
+  };
 
   // `useCallback` keyed on `filterStatus`, so the effect below can name the
   // loader as its only dependency instead of a hand-maintained list that drifts
@@ -41,6 +70,8 @@ export default function RegulatorDashboard() {
     // updates when the fetch resolves, not while the effect body runs.
     Promise.resolve().then(fetchAlerts);
   }, [fetchAlerts]);
+
+  useEffect(() => { Promise.resolve().then(fetchCertificates); }, [fetchCertificates]);
 
   const handleInvestigateAction = async (alertId: string, action: 'APPROVE' | 'REJECT' | 'FALSE_POSITIVE') => {
     setActionLoading(alertId);
@@ -144,6 +175,17 @@ export default function RegulatorDashboard() {
           </div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-bold text-gray-900">Certificate review desk <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs">{certificates.length} pending</span></h2><p className="mt-1 text-xs text-gray-500">Review issuer, dates and document evidence. Written reasons are required and recorded in the batch audit trail.</p></div><button type="button" onClick={() => void fetchCertificates()} className="rounded-lg border px-3 py-2 text-xs font-bold">Refresh queue</button></div>
+        {certificateError && <p role="alert" className="text-sm text-red-700">{certificateError}</p>}
+        {certificates.length === 0 ? <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">No pending certificates.</p> : certificates.map((certificate) => <article key={certificate._id} className="rounded-xl border border-gray-200 p-4 space-y-3">
+          <div className="flex flex-wrap justify-between gap-2"><div><p className="font-semibold">{certificate.certificateType} · {certificate.batch?.batchCode || 'Batch unavailable'}</p><p className="mt-1 text-xs text-gray-600">Issuer: {certificate.issuer} · Issued {new Date(certificate.issueDate).toLocaleDateString()} · Expires {new Date(certificate.expiryDate).toLocaleDateString()}</p></div>{certificate.fileUrl && <a href={certificate.fileUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 underline">Open evidence</a>}</div>
+          <p className="break-all font-mono text-[10px] text-gray-500">SHA-256: {certificate.fileHash}</p>
+          <textarea value={reviewNotes[certificate._id] || ''} onChange={(event) => setReviewNotes((items) => ({ ...items, [certificate._id]: event.target.value }))} maxLength={1000} rows={2} placeholder="Review findings and basis for decision (required)" className="w-full rounded-lg border border-gray-200 p-2 text-sm" />
+          <div className="flex gap-2"><button type="button" disabled={certificateLoading === certificate._id} onClick={() => void reviewCertificate(certificate._id, 'VERIFIED')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Approve certificate</button><button type="button" disabled={certificateLoading === certificate._id} onClick={() => void reviewCertificate(certificate._id, 'REJECTED')} className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Reject with reason</button></div>
+        </article>)}
+      </section>
 
       {/* Fraud Alert Queue Header */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-xs">

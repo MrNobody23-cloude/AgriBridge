@@ -1,9 +1,9 @@
 """
 AgriBridge AI Service — pytest integration tests.
 
-All tests use the session-scoped `client` fixture from conftest.py,
-which runs the FastAPI lifespan so ML models are trained and the
-RAG pipeline is initialised before any request is made.
+All tests use the session-scoped `client` fixture from conftest.py, which runs
+the FastAPI lifespan so available model artifacts load and the RAG pipeline is
+initialised before any request is made. The test setup does not train models.
 
 No real API keys are required — GEMINI_API_KEY is empty so the RAG
 pipeline falls back to retrieval-only answers and the agents router

@@ -3,6 +3,17 @@ import { findBatchByIdOrCode } from '@/lib/db/repositories/batches';
 import { createManyTemperatureLogs } from '@/lib/db/repositories/iot';
 import { requireAuth } from '@/lib/auth';
 import { successResponse, errorResponse } from '@/lib/response';
+import { z } from 'zod';
+
+const simulatorRequestSchema = z.object({
+    batchId: z.string().trim().min(1).optional(),
+    shipmentId: z.string().trim().min(1).optional(),
+    hoursOfData: z.number().int().min(1).max(168).default(24),
+    intervalMinutes: z.number().int().min(5).max(1440).default(30),
+    location: z.string().trim().min(1).max(200).optional(),
+}).refine((value) => value.batchId || value.shipmentId, {
+    message: 'Either batchId or shipmentId is required',
+});
 
 // ─── GET /api/iot/simulator/start ─────────────────────────────────────────────
 // Generates a batch of simulated IoT readings for a given batch.
@@ -13,12 +24,11 @@ export async function POST(req: NextRequest) {
     if (authResult instanceof Response) return authResult;
 
     try {
-        const body = await req.json();
-        const { batchId, shipmentId, hoursOfData = 24, intervalMinutes = 30 } = body;
-
-        if (!batchId && !shipmentId) {
-            return errorResponse('Either batchId or shipmentId is required', 'VALIDATION_ERROR', 400);
+        const parsed = simulatorRequestSchema.safeParse(await req.json());
+        if (!parsed.success) {
+            return errorResponse(parsed.error.issues[0]?.message ?? 'Invalid simulator request', 'VALIDATION_ERROR', 400);
         }
+        const { batchId, shipmentId, hoursOfData, intervalMinutes, location } = parsed.data;
 
         // Resolve batchId
         let resolvedBatchId: string | undefined;
@@ -61,7 +71,7 @@ export async function POST(req: NextRequest) {
                 sensorId: `SIM-${resolvedBatchId?.slice(-6) || shipmentId?.slice(-6)}`,
                 temperature,
                 humidity,
-                location: body.location || 'Reefer Container (Simulated)',
+                location: location || 'Reefer Container (Simulated)',
                 isSimulated: true,
                 timestamp,
             });

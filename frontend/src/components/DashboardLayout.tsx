@@ -4,6 +4,30 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import { useRouter } from 'next/navigation';
 import type { SessionUser } from '@/lib/session';
+import { dashboardForRole, ROLE_BY_DASHBOARD } from '@/lib/role-routes';
+import { usePathname } from 'next/navigation';
+import { ROLE_WORKFLOWS } from '@/lib/role-workflows';
+import Link from 'next/link';
+import { useTranslation } from '@/components/LanguageProvider';
+
+function translateStaticTree(node: React.ReactNode, translate: (text: string) => string): React.ReactNode {
+  if (typeof node === 'string') {
+    const leading = node.match(/^\s*/)?.[0] || '';
+    const trailing = node.match(/\s*$/)?.[0] || '';
+    const content = node.trim();
+    return content ? `${leading}${translate(content)}${trailing}` : node;
+  }
+  if (Array.isArray(node)) return node.map((child) => translateStaticTree(child, translate));
+  if (!React.isValidElement(node)) return node;
+
+  const element = node as React.ReactElement<Record<string, unknown> & { children?: React.ReactNode }>;
+  const props = { ...element.props };
+  for (const key of ['placeholder', 'title', 'aria-label']) {
+    if (typeof props[key] === 'string') props[key] = translate(props[key] as string);
+  }
+  if (props.children !== undefined) props.children = translateStaticTree(props.children, translate);
+  return React.cloneElement(element, props);
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -14,6 +38,8 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -22,7 +48,13 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.data) {
-            setUser(data.data);
+            const sessionUser = data.data as SessionUser;
+            const requiredRole = ROLE_BY_DASHBOARD[pathname];
+            if (requiredRole && sessionUser.role !== requiredRole) {
+              router.replace(dashboardForRole(sessionUser.role));
+              return;
+            }
+            setUser(sessionUser);
           } else {
             router.push('/login');
           }
@@ -36,7 +68,7 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
       }
     };
     fetchUser();
-  }, [router]);
+  }, [router, pathname]);
 
   if (loading) {
     return (
@@ -52,9 +84,11 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
   }
 
   if (!user) return null;
+  const workflow = ROLE_WORKFLOWS[user.role as keyof typeof ROLE_WORKFLOWS];
+  const localizedChildren = translateStaticTree(children, t);
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#FAFAF7]">
+    <div className="dashboard-shell min-h-screen relative overflow-hidden bg-[#FAFAF7]">
       {/* Glassmorphism background orbs */}
       <div className="fixed top-[-15%] right-[-5%] w-[45%] h-[45%] bg-blue-50 rounded-full blur-[100px] pointer-events-none opacity-60 z-0" />
       <div className="fixed bottom-[-15%] left-[-5%] w-[45%] h-[45%] bg-green-50 rounded-full blur-[100px] pointer-events-none opacity-60 z-0" />
@@ -65,10 +99,14 @@ export default function DashboardLayout({ children, title }: DashboardLayoutProp
         <Sidebar user={user} />
 
         {/* Main content area — offset by sidebar width */}
-        <div className="flex-1 min-w-0 ml-[240px] transition-all duration-300">
+        <div className="dashboard-content flex-1 min-w-0 ml-[240px] transition-all duration-300">
           <TopBar title={title} user={user} />
-          <main className="p-6 space-y-6">
-            {children}
+          <main className="dashboard-main p-6 space-y-6">
+            {workflow && <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-100 bg-white/90 px-5 py-4 shadow-sm" aria-label="Role responsibilities">
+              <div className="max-w-3xl"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-700">{t(workflow.title)}</p><p className="mt-1 text-sm text-gray-600">{t(workflow.duty)}</p></div>
+              <div className="flex flex-wrap gap-2">{workflow.actions.map((action) => <Link key={action.label} href={action.href} className="rounded-lg border border-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-50">{t(action.label)}</Link>)}</div>
+            </section>}
+            {localizedChildren}
           </main>
         </div>
       </div>

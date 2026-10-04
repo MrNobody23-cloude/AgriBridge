@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Search, User, LogOut, Settings } from 'lucide-react';
 import type { SessionUser } from '@/lib/session';
+import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider';
 
 const pageTitles: Record<string, string> = {
   '/farmer': 'Farmer Overview',
@@ -21,6 +22,7 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
   const pathname = usePathname();
   const router = useRouter();
   const title = propTitle || pageTitles[pathname] || 'Dashboard';
+  const { t } = useTranslation();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [aiStatus, setAiStatus] = useState<'checking' | 'healthy' | 'down'>('checking');
@@ -67,21 +69,22 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
   };
 
   return (
-    <header className="h-16 glass-header px-6 flex items-center justify-between sticky top-0 z-30 transition-all rounded-b-2xl mx-6 mt-2">
+    <header className="dashboard-topbar h-16 glass-header px-6 flex items-center justify-between sticky top-0 z-30 transition-all rounded-b-2xl mx-6 mt-2">
       {/* Breadcrumb & Title */}
       <div className="flex items-center gap-2 text-xs text-gray-600">
         <span className="font-medium hidden sm:inline">AgriBridge AI</span>
         <span className="hidden sm:inline">/</span>
-        <span className="font-bold text-[#1a1a1a] text-sm">{title}</span>
+        <span className="font-bold text-[#1a1a1a] text-sm">{t(title)}</span>
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        <LanguageSwitcher />
         {/* Search Bar */}
         <div className="relative hidden md:block">
           <input
             type="text"
-            placeholder="Search trace, batch..."
+            placeholder={t('Search trace, batch...')}
             className="w-56 pl-9 pr-4 py-1.5 text-xs bg-white/40 border border-white/60 rounded-full text-[#1a1a1a] placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-agro-green/50 backdrop-blur-md"
           />
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
@@ -106,10 +109,10 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
           >
             {aiStatus === 'healthy' && <span className="pulsing-dot"></span>}
             {aiStatus === 'healthy'
-              ? 'AI Operational'
+              ? t('AI Operational')
               : aiStatus === 'checking'
-                ? 'Checking AI…'
-                : 'AI Not Running'}
+                ? t('Checking AI…')
+                : t('AI Not Running')}
           </div>
 
           <div className="relative">
@@ -123,9 +126,9 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
             {showNotifications && (
               <div className="absolute right-0 mt-3 w-80 glass-card p-3 space-y-2 z-50 animate-feed-slide-in">
                 <div className="flex items-center justify-between border-b border-gray-200/50 pb-2">
-                  <span className="text-xs font-bold text-[#1a1a1a]">Updates</span>
+                  <span className="text-xs font-bold text-[#1a1a1a]">{t('Updates')}</span>
                 </div>
-                <div className="text-xs text-gray-500 py-2 text-center">No new notifications.</div>
+                <div className="text-xs text-gray-500 py-2 text-center">{t('No new notifications.')}</div>
               </div>
             )}
           </div>
@@ -149,10 +152,10 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
                 <p className="text-xs font-bold text-[#1a1a1a] truncate">{user?.email}</p>
               </div>
               <button className="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-white/40 flex items-center gap-2 font-medium">
-                <Settings className="w-3.5 h-3.5" /> Settings
+                <Settings className="w-3.5 h-3.5" /> {t('Settings')}
               </button>
               <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium">
-                <LogOut className="w-3.5 h-3.5" /> Logout
+                <LogOut className="w-3.5 h-3.5" /> {t('Logout')}
               </button>
             </div>
           )}

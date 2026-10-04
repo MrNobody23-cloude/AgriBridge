@@ -6,8 +6,11 @@
         "start": "python ai-service/main.py",
         "seed": "tsx scripts/seed-test-users.ts",
         "seed:test-users": "tsx scripts/seed-test-users.ts",
+        "dev:ai": "python ai-service/main.py",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "test:contracts": "hardhat test",
+        "compile:contracts": "hardhat compile"
     },
     "dependencies": {
         "bcryptjs": "^3.0.3",

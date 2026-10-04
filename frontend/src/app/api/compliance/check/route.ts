@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
         if (!shipment) {
             return errorResponse(`Shipment ${validated.shipmentId} not found`, 'SHIPMENT_NOT_FOUND', 404);
         }
+        if (authResult.user.role === 'EXPORTER' && shipment.exporterId !== authResult.user.id) {
+            return errorResponse('You can only review your own export shipments', 'FORBIDDEN', 403);
+        }
 
         // The `include: { batch: { include: { product, certificates } }, complianceChecks }`
         // this used to fetch is not read below — the crop falls back to the
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
         // nothing retrieved there is no document, so it says so rather than
         // naming a knowledge base that was never queried.
         const firstSource = sourceName(sources[0]) ||
-            'No regulatory source retrieved — RAG service did not respond';
+            'No validated regulatory evidence retrieved';
         // An unanswered check has no retrieval behind it, so it has no
         // confidence to report. This defaulted to 0.7 whenever the AI service
         // did not answer, which wrote a fabricated score into AiAgentLog and
@@ -100,19 +103,20 @@ export async function POST(req: NextRequest) {
         const confidence = ragResult.answer ? Number(ragResult.confidence || 0) : 0;
 
         // Parse compliance checks from RAG answer or fallback
-        const passed = !answer.toLowerCase().includes('insufficient evidence') &&
-            !answer.toLowerCase().includes('not compliant') &&
-            answer.length > 50;
+        // A generated answer or a non-empty retrieval is not a compliance
+        // decision. Until an authoritative, versioned ruleset supplies a
+        // structured assessment, keep the result pending for human review.
+        const passed = false;
 
         // Save compliance checks to DB
         const checks = [
             {
                 requirement: `Export compliance for ${validated.country}`,
-                status: passed ? 'PASSED' : 'PENDING',
+                status: 'PENDING',
                 // The citation names the document that was actually retrieved.
                 // With nothing retrieved there is no document, so it says so
                 // rather than naming a knowledge base that was never queried.
-                explanation: answer.slice(0, 500) || 'RAG analysis pending',
+                explanation: answer || 'No answer or validated evidence was returned. Manual regulatory review is required.',
                 source: firstSource,
             },
         ];
@@ -138,9 +142,9 @@ export async function POST(req: NextRequest) {
             agentType: 'compliance',
             task: `Regulatory screening for export to ${validated.country}`,
             input: JSON.stringify({ country: validated.country, crop, shipmentId: shipment._id }),
-            output: answer.slice(0, 500),
+            output: answer,
             confidence,
-            status: passed ? 'PASSED' : 'PENDING',
+            status: 'PENDING',
             evidence: JSON.stringify(ragResult.evidence || []),
             sources: JSON.stringify(sources),
         });
@@ -155,7 +159,11 @@ export async function POST(req: NextRequest) {
             ragAnswer: answer,
             sources,
             confidence,
-            warning: !ragResult.answer ? 'AI_SERVICE_UNAVAILABLE' : undefined,
+            warning: !ragResult.answer
+                ? 'AI_SERVICE_UNAVAILABLE'
+                : sources.length === 0
+                    ? 'NO_VALIDATED_REGULATORY_EVIDENCE'
+                    : 'HUMAN_REVIEW_REQUIRED',
         });
     } catch (err: unknown) {
         if (isZodError(err)) {

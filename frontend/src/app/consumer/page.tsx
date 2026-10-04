@@ -7,6 +7,9 @@ import type { ApiBatchDetail } from '@/lib/api-types';
 import RecentBatchCodes from '@/components/RecentBatchCodes';
 import Link from 'next/link';
 
+type ChatSource = { title?: string; source?: string; verification?: string; recordId?: string };
+type ChatMessage = { sender: 'user' | 'bot'; text: string; sources?: ChatSource[] };
+
 export default function ConsumerPage() {
   // Empty by default. This was pre-filled with 'AGR-2026-UK-284701' and the
   // chat silently fell back to the same code whenever the field was cleared,
@@ -18,7 +21,7 @@ export default function ConsumerPage() {
   const [error, setError] = useState('');
 
   // AI Chat Bot State
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string }>>([
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { sender: 'bot', text: 'Hello! I am your Consumer Trust AI Assistant. Ask me anything about crop origins, organic certifications, or blockchain proof.' },
   ]);
   const [userQuery, setUserQuery] = useState('');
@@ -76,7 +79,10 @@ export default function ConsumerPage() {
 
       const json = await res.json();
       if (json.success) {
-        setChatMessages([...newMsgs, { sender: 'bot', text: json.data.answer }]);
+        const sources: ChatSource[] = Array.isArray(json.data.sources)
+          ? json.data.sources.map((source: string | ChatSource) => typeof source === 'string' ? { title: source } : source)
+          : [];
+        setChatMessages([...newMsgs, { sender: 'bot', text: json.data.answer, sources }]);
       } else {
         setChatMessages([...newMsgs, { sender: 'bot', text: 'Apologies, I encountered an issue retrieving verified answers.' }]);
       }
@@ -228,12 +234,22 @@ export default function ConsumerPage() {
                   className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-md p-3 rounded-2xl text-xs font-medium ${msg.sender === 'user'
+                    className={`max-w-md p-3 rounded-2xl text-xs font-medium whitespace-pre-wrap ${msg.sender === 'user'
                       ? 'bg-[#16a34a] text-white rounded-br-none'
                       : 'bg-white border border-gray-200 text-[#1a1a1a] rounded-bl-none shadow-xs'
                       }`}
                   >
                     {msg.text}
+                    {msg.sender === 'bot' && msg.sources && msg.sources.length > 0 && (
+                      <div className="mt-3 border-t border-gray-100 pt-2">
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">Live records used</p>
+                        {msg.sources.map((source, sourceIndex) => (
+                          <p key={`${source.title || source.source}-${sourceIndex}`} className="text-[10px] leading-5 text-gray-600">
+                            {source.title || source.source || 'AgriBridge feed'}{source.recordId ? ` · ${source.recordId}` : ''}{source.verification ? ` · ${source.verification}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

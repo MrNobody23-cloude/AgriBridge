@@ -73,13 +73,11 @@ async def consumer_answer(req: ConsumerQueryRequest, request: Request):
 
 @router.post("/documents/add")
 async def add_document(req: AddDocumentRequest, request: Request):
-    """Admin endpoint: add a new regulation document to the knowledge base."""
-    rag: RAGPipeline = request.app.state.rag_pipeline
-    doc = req.model_dump()
-    ok = rag.add_document(doc)
-    if not ok:
-        raise HTTPException(status_code=503, detail="RAG pipeline not initialized or embedder unavailable")
-    return {"success": True, "message": f"Document '{req.title}' added to knowledge base", "documentsTotal": len(rag.documents)}
+    """Reject unverified manual text; knowledge is built from platform feeds."""
+    raise HTTPException(
+        status_code=410,
+        detail="Manual text ingestion is disabled. Knowledge records must come from validated AgriBridge feeds.",
+    )
 
 
 @router.get("/documents/count")

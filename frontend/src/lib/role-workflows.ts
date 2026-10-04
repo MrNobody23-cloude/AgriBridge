@@ -1,0 +1,12 @@
+import type { Role } from './permissions';
+
+export const ROLE_WORKFLOWS: Record<Role, { title: string; duty: string; actions: Array<{ label: string; href: string }> }> = {
+  FARMER: { title: 'Farm operations', duty: 'Register harvested lots, maintain your batch records, and attach crop certificates for the supply chain.', actions: [{ label: 'Register a crop batch', href: '/farmer' }, { label: 'Review your batches', href: '/farmer' }] },
+  EXPORTER: { title: 'Export operations', duty: 'Prepare shipments from registered batches, attach export documents, and review destination evidence before dispatch.', actions: [{ label: 'Create a shipment', href: '/exporter' }, { label: 'Review shipment evidence', href: '/exporter' }] },
+  TRANSPORTER: { title: 'Cold-chain operations', duty: 'Record consignment conditions, inspect temperature history, and flag cold-chain excursions for review.', actions: [{ label: 'Open logistics and IoT', href: '/transporter' }, { label: 'View traceability', href: '/verify' }] },
+  IMPORTER: { title: 'Import operations', duty: 'Inspect incoming consignments, run destination screening, and record receipt decisions against shipment evidence.', actions: [{ label: 'Review imports', href: '/importer' }, { label: 'Run import screening', href: '/importer' }] },
+  RETAILER: { title: 'Retail traceability', duty: 'Verify provenance and freshness evidence for batches before stocking and retain traceability records.', actions: [{ label: 'Verify a batch', href: '/retailer' }, { label: 'Open traceability', href: '/verify' }] },
+  CONSUMER: { title: 'Product verification', duty: 'Check a product batch to see its origin, recorded supply-chain history, certificates, and available verification evidence.', actions: [{ label: 'Verify a product', href: '/consumer' }, { label: 'Open batch verification', href: '/verify' }] },
+  REGULATOR: { title: 'Regulatory oversight', duty: 'Review pending certificates, investigate fraud alerts, document decisions, and maintain an auditable evidence trail.', actions: [{ label: 'Review certificates', href: '/regulator' }, { label: 'Investigate alerts', href: '/regulator' }] },
+  ADMIN: { title: 'Platform administration', duty: 'Review registered accounts and monitor platform activity. Regulatory decisions are reserved for authorized regulator accounts.', actions: [{ label: 'Manage platform users', href: '/admin' }, { label: 'Open agent activity', href: '/agents' }] },
+};

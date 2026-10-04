@@ -125,7 +125,10 @@ const BatchSchema = new S(
         variety: { type: String, default: null },
         quantity: { type: Number, required: true },
         unit: { type: String, required: true, default: 'kg' },
+        sowingDate: { type: Date, default: null },
         harvestDate: { type: Date, required: true },
+        actualHarvestDate: { type: Date, default: null },
+        harvestStage: { type: String, required: true, default: 'REGISTERED' },
         location: { type: String, required: true },
         destinationCountry: { type: String, default: null },
         /// Registered | In Transit | Exported | Delivered | Flagged | Recalled
@@ -190,6 +193,9 @@ const CertificateSchema = new S(
         expiryDate: { type: Date, required: true },
         /// PENDING | VERIFIED | MISMATCH | NOT_FOUND | DUPLICATE | SUSPICIOUS
         verificationStatus: { type: String, required: true, default: 'PENDING' },
+        reviewedBy: { type: String, default: null },
+        reviewedAt: { type: Date, default: null },
+        reviewNotes: { type: String, default: null },
         blockchainHash: { type: String, default: null },
     },
     { timestamps: { createdAt: true, updatedAt: false }, collection: 'certificates' }
@@ -574,7 +580,10 @@ export interface BatchDoc {
     variety?: string | null;
     quantity: number;
     unit: string;
+    sowingDate?: Date | null;
     harvestDate: Date;
+    actualHarvestDate?: Date | null;
+    harvestStage?: string;
     location: string;
     destinationCountry?: string | null;
     status: string;
@@ -617,6 +626,9 @@ export interface CertificateDoc {
     issueDate: Date;
     expiryDate: Date;
     verificationStatus: string;
+    reviewedBy?: string | null;
+    reviewedAt?: Date | null;
+    reviewNotes?: string | null;
     blockchainHash?: string | null;
     createdAt: Date;
 }

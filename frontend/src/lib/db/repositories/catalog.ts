@@ -87,6 +87,28 @@ export async function createCertificate(input: CreateCertificateInput): Promise<
     return certificate.toObject() as CertificateDoc;
 }
 
+/** Certificates awaiting an official review, paired with their batch code. */
+export async function listPendingCertificates(limit = 100) {
+    await connectToDatabase();
+    const certificates = await CertificateModel.find({ verificationStatus: 'PENDING' })
+        .sort({ createdAt: 1 }).limit(limit).lean<CertificateDoc[]>().exec();
+    if (!certificates.length) return [];
+    const { BatchModel } = await import('../models');
+    const batches = await BatchModel.find({ _id: { $in: [...new Set(certificates.map((c) => c.batchId))] } })
+        .select({ _id: 1, batchCode: 1, farmerId: 1 }).lean<Array<{ _id: string; batchCode: string; farmerId: string }>>().exec();
+    const byId = new Map(batches.map((b) => [b._id, b]));
+    return certificates.map((certificate) => ({ ...certificate, batch: byId.get(certificate.batchId) ?? null }));
+}
+
+export async function reviewCertificate(id: string, status: 'VERIFIED' | 'REJECTED', reviewerId: string, notes: string) {
+    await connectToDatabase();
+    return CertificateModel.findOneAndUpdate(
+        { _id: id, verificationStatus: 'PENDING' },
+        { $set: { verificationStatus: status, reviewedBy: reviewerId, reviewedAt: new Date(), reviewNotes: notes } },
+        { new: true },
+    ).lean<CertificateDoc>().exec();
+}
+
 /**
  * A certificate on *another* batch with the same content hash.
  *

@@ -65,10 +65,12 @@ export async function POST(req: NextRequest) {
             return errorResponse('Quantity must be a positive number', 'VALIDATION_ERROR', 400);
         }
 
-        // Validate harvestDate is not in the future by more than 1 day
+        // At registration this is the expected harvest date; farmers may create
+        // a lot at planting and later report the actual harvest as a lifecycle event.
         const harvestDate = new Date(validated.harvestDate);
-        if (harvestDate > new Date(Date.now() + 24 * 60 * 60 * 1000)) {
-            return errorResponse('Harvest date cannot be in the future', 'VALIDATION_ERROR', 400);
+        const sowingDate = validated.sowingDate ? new Date(validated.sowingDate) : null;
+        if (Number.isNaN(harvestDate.getTime()) || (sowingDate && (Number.isNaN(sowingDate.getTime()) || sowingDate > harvestDate))) {
+            return errorResponse('Provide valid sowing and expected harvest dates; sowing must not be after harvest.', 'VALIDATION_ERROR', 400);
         }
 
         // Get the authenticated farmer (not the first farmer in DB)
@@ -103,9 +105,13 @@ export async function POST(req: NextRequest) {
             batchCode,
             farmerId: farmer._id,
             crop: validated.crop,
+            variety: validated.variety,
             quantity: validated.quantity,
+            unit: validated.unit,
+            sowingDate: validated.sowingDate,
             harvestDate: validated.harvestDate,
             location: validated.location,
+            destinationCountry: validated.destinationCountry,
         });
 
         // Register on Polygon blockchain. When no contract is configured this
@@ -124,6 +130,8 @@ export async function POST(req: NextRequest) {
             quantity: validated.quantity,
             unit: validated.unit || 'kg',
             harvestDate,
+            sowingDate,
+            harvestStage: 'REGISTERED',
             location: validated.location,
             destinationCountry: validated.destinationCountry,
             status: 'Registered',

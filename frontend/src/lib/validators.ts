@@ -23,11 +23,12 @@ export const loginSchema = z.object({
 // ─── Batches ──────────────────────────────────────────────────────────────────
 
 export const createBatchSchema = z.object({
-    crop: z.string().min(1, 'Crop type is required').max(100),
+    crop: z.string().trim().min(1, 'Crop type is required').max(100),
     variety: z.string().optional(),
     quantity: z.number().positive('Quantity must be a positive number'),
     unit: z.string().optional().default('kg'),
     harvestDate: z.string().min(1, 'Harvest date is required'),
+    sowingDate: z.string().optional(),
     location: z.string().min(1, 'Farm location is required').max(200),
     destinationCountry: z.string().optional(),
     // Optional certificate info
@@ -52,13 +53,19 @@ export const certificateUploadSchema = z.object({
     batchId: z.string().min(1, 'Batch ID is required'),
     certificateType: z.string().min(1, 'Certificate type is required'),
     fileUrl: z.string().optional(),
+    fileName: z.string().max(255).optional(),
     fileHash: z.string().length(64, 'File hash must be a 64-character SHA-256 hex string'),
     issuer: z.string().min(1, 'Issuer name is required'),
+    issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Issue date must be YYYY-MM-DD'),
     expiryDate: z.string().min(1, 'Expiry date is required'),
     // Supply either a pre-pinned IPFS hash or raw base64 file content for pinning
     ipfsHash: z.string().optional(),
     fileBase64: z.string().optional(),
-}).refine(
+}).refine((d) => {
+    const issued = new Date(`${d.issueDate}T00:00:00Z`);
+    const expires = new Date(d.expiryDate);
+    return Number.isFinite(issued.getTime()) && Number.isFinite(expires.getTime()) && expires > issued && issued <= new Date();
+}, { message: 'Certificate dates must be valid, with expiry after issue and issue date not in the future', path: ['expiryDate'] }).refine(
     (d) => d.fileUrl || d.fileBase64 || d.ipfsHash,
     { message: 'Provide fileUrl, fileBase64, or ipfsHash', path: ['fileUrl'] }
 );
