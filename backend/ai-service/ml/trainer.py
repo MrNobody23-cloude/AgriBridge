@@ -425,7 +425,7 @@ if __name__ == "__main__":
         except Exception:
             failed_models.append(name)
             logger.exception("Failed to train %s model", name)
-            print(f"Status: FAILED — check the error in the logs.")
+            print("Status: FAILED — check the error in the logs.")
 
     print("\n" + "=" * 65)
     print("TRAINING SUMMARY")
