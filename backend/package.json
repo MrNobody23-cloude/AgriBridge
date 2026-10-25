@@ -10,26 +10,37 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:contracts": "hardhat test",
-        "compile:contracts": "hardhat compile"
+        "compile:contracts": "hardhat compile",
+        "agribridge": "powershell -ExecutionPolicy Bypass -File scripts/start-agribridge-n8n.ps1",
+        "dev:all": "npm run agribridge && npm run dev:ai"
     },
     "dependencies": {
         "bcryptjs": "^3.0.3",
-        "dotenv": "^18.0.3",
+        "dotenv": "^18.0.9",
         "ethers": "^6.17.0",
         "jsonwebtoken": "^9.0.3",
-        "mongoose": "^8.24.4",
-        "zod": "^4.5.4"
+        "mongoose": "^9.11.4",
+        "zod": "^4.6.7"
     },
     "devDependencies": {
-        "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-        "@prisma/client": "^5.22.0",
+        "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+        "@prisma/client": "^7.10.1",
         "@types/jsonwebtoken": "^9.0.10",
-        "@types/node": "^24.19.0",
-        "hardhat": "^2.29.1",
-        "next": "16.3.0",
-        "prisma": "^5.22.0",
-        "tsx": "^4.23.13",
-        "typescript": "^5",
-        "vitest": "^2.1.9"
+        "@types/node": "^26.6.5",
+        "hardhat": "^3.21.0",
+        "next": "16.4.3",
+        "prisma": "^7.10.1",
+        "tsx": "^4.23.15",
+        "typescript": "^7",
+        "vitest": "^5.0.5"
+    },
+    "allowScripts": {
+        "@prisma/client@5.22.0": true,
+        "@prisma/engines@5.22.0": true,
+        "esbuild@0.28.2": true,
+        "esbuild@0.21.5": true,
+        "keccak@3.0.4": true,
+        "prisma@5.22.0": true,
+        "secp256k1@4.0.5": true
     }
 }

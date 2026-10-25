@@ -88,8 +88,8 @@ export default function LandingPage() {
               <ScanLine size={19} className="text-[#53775b]" />
             </div>
           </div>
-          <div className="floating-note"><PackageCheck size={17} /><span><strong>From harvest</strong><small>to verified product</small></span></div>
-          <div className="visual-caption">A shared view across the supply chain</div>
+          {/* <div className="floating-note"><PackageCheck size={17} /><span><strong>From harvest</strong><small>to verified product</small></span></div>
+          <div className="visual-caption">A shared view across the supply chain</div> */}
         </div>
       </section>
 

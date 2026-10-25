@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
             email: found.email,
             name: found.name,
             role: found.role,
-        });
+            phone: found.phone || null,
+        } as any);
 
         const response = successResponse({
             user: {

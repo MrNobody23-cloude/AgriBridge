@@ -27,7 +27,12 @@ import joblib
 
 logger = logging.getLogger("agribridge.ml.registry")
 
-MODEL_DIR = Path(os.getenv("MODEL_DIR", "./models"))
+MODEL_DIR = Path(
+    os.getenv(
+        "MODEL_DIR",
+        str(Path(__file__).resolve().parent.parent / "models")
+    )
+).resolve()
 
 
 class ModelRegistry:

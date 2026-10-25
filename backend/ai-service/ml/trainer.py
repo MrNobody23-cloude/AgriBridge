@@ -16,6 +16,8 @@ Dataset transparency:
 """
 import logging
 from datetime import datetime
+import joblib
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -353,3 +355,97 @@ def train_default_model(model_name: str):
 
     logger.info(f"✅ Trained {model_name}: {metrics}")
     return model, metadata
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+
+    # trainer.py is in ai-service/ml/
+    # Models are stored in ai-service/models/
+    MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    model_names = [
+        "spoilage",
+        "shelf_life",
+        "quality",
+        "fraud",
+    ]
+
+    trained_count = 0
+    failed_models = []
+
+    print("\n" + "=" * 65)
+    print("       AgriBridge AI — Default Model Trainer")
+    print("=" * 65)
+    print(f"Model directory: {MODEL_DIR}")
+    print("Dataset: Synthetic agricultural supply chain data")
+
+    for name in model_names:
+        print(f"\n{'-' * 65}")
+        print(f"Training {name.upper()} model...")
+        print("-" * 65)
+
+        try:
+            # Train the model
+            model, metadata = train_default_model(name)
+
+            # Select the appropriate existing model filename
+            model_filenames = {
+                "spoilage": "spoilage_xgboost_v1.joblib",
+                "shelf_life": "shelf_life_xgboost_v1.joblib",
+                "quality": "quality_xgboost_v1.joblib",
+                "fraud": "fraud_isolation_forest_v1.joblib",
+            }
+
+            model_path = MODEL_DIR / model_filenames[name]
+
+            # Save the trained model
+            joblib.dump(model, model_path)
+
+            # Save metadata as JSON to match your existing structure
+            import json
+
+            metadata_path = MODEL_DIR / f"{name}_metadata.json"
+
+            with open(metadata_path, "w", encoding="utf-8") as file:
+                json.dump(metadata, file, indent=4, default=str)
+
+            trained_count += 1
+
+            print(f"Model type: {metadata['model_type']}")
+            print(f"Features: {metadata['num_features']}")
+            print(f"Metrics: {metadata['metrics']}")
+            print(f"Model saved: {model_path}")
+            print(f"Metadata saved: {metadata_path}")
+            print("Status: SUCCESS")
+
+        except Exception:
+            failed_models.append(name)
+            logger.exception("Failed to train %s model", name)
+            print(f"Status: FAILED — check the error in the logs.")
+
+    print("\n" + "=" * 65)
+    print("TRAINING SUMMARY")
+    print("=" * 65)
+    print(f"Total models: {len(model_names)}")
+    print(f"Successful: {trained_count}")
+    print(f"Failed: {len(failed_models)}")
+
+    if failed_models:
+        print(f"Failed models: {', '.join(failed_models)}")
+
+    print(f"Output directory: {MODEL_DIR}")
+    print("=" * 65)
+
+    if trained_count == len(model_names):
+        print("All four models trained and saved successfully!")
+    else:
+        print("Some models failed. Check the logs above.")
+
+    print(
+        "\nNOTE: Models are trained on synthetic data "
+        "for prototype and academic demonstration."
+    )
