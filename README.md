@@ -64,7 +64,7 @@ npm run dev --prefix frontend
 ```
 
 ```powershell
-npm run dev:ai --prefix backend
+npm run dev:all --prefix backend
 ```
 
 The UI is at `http://localhost:3000`; FastAPI's development schema is at `http://127.0.0.1:8000/docs`. The AI service binds to loopback by default. Set `AI_SERVICE_HOST=0.0.0.0` explicitly when running it inside a container. For Gemini-backed batch chat, set the same random `AI_SERVICE_API_KEY` in the root `.env` and `backend/ai-service/.env`; the Python batch-feed route rejects unsigned requests. If no key/model is configured, Next.js falls back to extractive answers from the same live records.

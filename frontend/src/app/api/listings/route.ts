@@ -65,8 +65,9 @@ export async function GET(req: NextRequest) {
       const phone: string | null = user.phone || dbUser?.phone || null;
 
       // Telegram chat ID stored on the user profile (if the field exists)
-      const profileTelegramId = (dbUser as Record<string, unknown> | null)
-        ?.telegramId;
+      const profileTelegramId = (
+        dbUser as unknown as { telegramId?: string | number | null } | null
+      )?.telegramId;
 
       console.log("[listings] farmer mode, phone:", phone);
 
@@ -147,7 +148,9 @@ export async function GET(req: NextRequest) {
       phone_number: doc.phone_number ?? null,
       // Convert Date objects / ISODate to ISO strings so Next.js can serialize
       // and the browser can parse them reliably.
-      created_at: doc.created_at ? new Date(doc.created_at).toISOString() : null,
+      created_at: doc.created_at
+        ? new Date(doc.created_at).toISOString()
+        : null,
       createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
     }));
 
