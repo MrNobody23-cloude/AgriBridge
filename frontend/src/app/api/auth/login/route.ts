@@ -16,9 +16,17 @@ export async function POST(req: NextRequest) {
             return errorResponse('Invalid email or password', 'INVALID_CREDENTIALS', 401);
         }
 
+        if (!['FARMER', 'TRANSPORTER', 'RETAILER', 'CONSUMER', 'ADMIN'].includes(found.role)) {
+            return errorResponse('This account role is no longer supported. Contact an administrator to migrate the account.', 'ROLE_RETIRED', 403);
+        }
+
         const isValid = await comparePassword(validated.password, found.password);
         if (!isValid) {
             return errorResponse('Invalid email or password', 'INVALID_CREDENTIALS', 401);
+        }
+
+        if (found.isActive === false) {
+            return errorResponse('This account is disabled. Contact an administrator.', 'ACCOUNT_DISABLED', 403);
         }
 
         // The profile is only needed for the response body, so it is fetched
@@ -42,6 +50,9 @@ export async function POST(req: NextRequest) {
                 role: found.role,
                 phone: found.phone,
                 farmerProfile: user?.farmerProfile ?? null,
+                shopLocation: found.shopLocation || null,
+                latitude: found.latitude ?? null,
+                longitude: found.longitude ?? null,
             },
         });
 

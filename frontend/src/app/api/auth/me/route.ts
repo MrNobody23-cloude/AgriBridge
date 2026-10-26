@@ -6,6 +6,9 @@ export async function GET() {
     if (!user) {
         return errorResponse('Unauthorized', 'UNAUTHORIZED', 401);
     }
+    if (!['FARMER', 'TRANSPORTER', 'RETAILER', 'CONSUMER', 'ADMIN'].includes(user.role)) {
+        return errorResponse('This account role is no longer supported. Contact an administrator to migrate the account.', 'ROLE_RETIRED', 403);
+    }
 
     // `getFullSessionUser` already excludes `password` in its query, so there
     // is nothing to strip here. The destructure that used to do it also would

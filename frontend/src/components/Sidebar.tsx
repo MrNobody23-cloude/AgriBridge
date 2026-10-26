@@ -3,9 +3,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  Truck, Package, Store, ShieldCheck, UserCheck,
+  Truck, Store, UserCheck,
   Activity, Users, BarChart3, Link2, LogOut, ChevronRight,
-  Leaf, Globe, FileText
+  Leaf, FileText
 } from 'lucide-react';
 import { hasPermission, Permission, Role } from '@/lib/permissions';
 import type { SessionUser } from '@/lib/session';
@@ -23,12 +23,9 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   // Role dashboards
   { href: '/farmer', label: 'Farm Overview', icon: Leaf, permission: 'batch:create', section: 'My Dashboard' },
-  { href: '/exporter', label: 'Export Console', icon: Package, permission: 'shipment:create', section: 'My Dashboard' },
-  { href: '/transporter', label: 'Logistics & IoT', icon: Truck, permission: 'iot:manage', section: 'My Dashboard' },
-  { href: '/importer', label: 'Import Receipt', icon: Globe, permission: 'shipment:update', section: 'My Dashboard' },
+  { href: '/transporter', label: 'Domestic Logistics', icon: Truck, permission: 'marketplace:manage', section: 'My Dashboard' },
   { href: '/retailer', label: 'Retail Info', icon: Store, permission: 'ml:predict', section: 'My Dashboard' },
   { href: '/consumer', label: 'Verify Product', icon: UserCheck, permission: 'batch:read', section: 'My Dashboard' },
-  { href: '/regulator', label: 'Compliance Audit', icon: ShieldCheck, permission: 'compliance:manage', section: 'My Dashboard' },
   { href: '/admin', label: 'System Admin', icon: Users, permission: 'users:manage', section: 'My Dashboard' },
 
   // Shared tools

@@ -14,7 +14,8 @@ export default function RegisterPage() {
 
     // Extra details based on role
     const [farmName, setFarmName] = useState('');
-    const [location, setLocation] = useState('');
+    const [location, setLocation] = useState('Sr. No. 47, Village - Avachitwadi, Goti, Igatpuri, Takeghoti, Nashik-422402, Maharashtra');
+    const [shopLocation, setShopLocation] = useState('Limbani Darshan, Near Tilak Nagar, Kalyan Road, Dombivli East, Thane-421201, Maharashtra');
     const [stateInfo, setStateInfo] = useState('');
     const [district, setDistrict] = useState('');
     const [companyDetails, setCompanyDetails] = useState('');
@@ -38,7 +39,7 @@ export default function RegisterPage() {
         try {
             const payload = {
                 name, email, password, role,
-                ...(role === ROLES.FARMER ? { farmName, location, state: stateInfo, district } : { companyDetails })
+                ...(role === ROLES.FARMER ? { farmName, location, state: stateInfo || 'Maharashtra', district: district || 'Nashik' } : role === ROLES.RETAILER ? { companyDetails, shopLocation } : { companyDetails })
             };
 
             const res = await fetch('/api/auth/register', {
@@ -118,9 +119,7 @@ export default function RegisterPage() {
                             <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">{t('Primary Role')}</label>
                             <select value={role} onChange={e => setRole(e.target.value)} className="w-full px-4 py-3 bg-white/50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-agro-green/50">
                                 <option value="FARMER">Farmer</option>
-                                <option value="EXPORTER">Exporter</option>
                                 <option value="TRANSPORTER">Transporter</option>
-                                <option value="IMPORTER">Importer</option>
                                 <option value="RETAILER">Retailer</option>
                                 <option value="CONSUMER">Consumer</option>
                                 {/* Regulator and Admin omitted from self-service registration */}
@@ -146,7 +145,14 @@ export default function RegisterPage() {
                                     <input type="text" value={stateInfo} onChange={e => setStateInfo(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
                                 </div>
                             </div>
-                        ) : (role !== 'CONSUMER' && (
+                        ) : (role === 'RETAILER' ? (
+                            <div className="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+                                <label className="block text-xs font-bold uppercase tracking-wide text-gray-700">Retail shop location in India
+                                    <textarea value={shopLocation} onChange={(event) => setShopLocation(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-normal normal-case" rows={2} minLength={5} required />
+                                </label>
+                                <p className="text-[11px] text-gray-600">You can share precise shop GPS after signing in. This address is used for retailer map pins, routing, and delivery handoff.</p>
+                            </div>
+                        ) : role !== 'CONSUMER' && (
                             <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
                                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Company / Organization Details</label>
                                 <input type="text" value={companyDetails} onChange={e => setCompanyDetails(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Company Name, License Number, etc." required />

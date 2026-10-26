@@ -7,12 +7,9 @@ import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider'
 
 const pageTitles: Record<string, string> = {
   '/farmer': 'Farmer Overview',
-  '/exporter': 'Export Console',
-  '/transporter': 'Logistics & IoT',
-  '/importer': 'Import Receipt',
+  '/transporter': 'Domestic Logistics',
   '/retailer': 'Retail Information',
   '/consumer': 'Consumer Verification',
-  '/regulator': 'Compliance & Audit',
   '/admin': 'System Administrator',
   '/agents': 'AI Insights',
   '/trust-score': 'Trust Analysis',

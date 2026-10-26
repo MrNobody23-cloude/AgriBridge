@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { dashboardForRole } from '@/lib/role-routes';
 import { LanguageSwitcher, useTranslation } from '@/components/LanguageProvider';
 
-type DemoAccount = { email: string; role: string; name: string };
+type DemoAccount = { email: string; role: string; name: string; defaultLocation?: string };
 
 export default function LoginPage() {
     const [email, setEmail] = useState('');
@@ -14,6 +14,10 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([]);
     const [demoPassword, setDemoPassword] = useState('');
+    const [locationSetup, setLocationSetup] = useState<{ role: string; location: string } | null>(null);
+    const [locationValue, setLocationValue] = useState('');
+    const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [locationSaving, setLocationSaving] = useState(false);
     const router = useRouter();
     const { t } = useTranslation();
 
@@ -43,14 +47,41 @@ export default function LoginPage() {
                 setError(data.error?.message || 'Invalid credentials');
                 return;
             }
-            // Navigate based on role
-            router.replace(dashboardForRole(data.data.user.role));
+            const account = data.data.user;
+            if (account.role === 'FARMER' || account.role === 'RETAILER') {
+                const demoLocation = demoAccounts.find((demo) => demo.email === account.email)?.defaultLocation;
+                setLocationSetup({ role: account.role, location: demoLocation || account.farmerProfile?.location || account.shopLocation || '' });
+                setLocationValue(demoLocation || account.farmerProfile?.location || account.shopLocation || '');
+                if (Number.isFinite(account.farmerProfile?.latitude ?? account.latitude) && Number.isFinite(account.farmerProfile?.longitude ?? account.longitude)) {
+                    setCoordinates({ latitude: account.farmerProfile?.latitude ?? account.latitude, longitude: account.farmerProfile?.longitude ?? account.longitude });
+                }
+                return;
+            }
+            router.replace(dashboardForRole(account.role));
             router.refresh();
         } catch {
             setError('An error occurred during login');
         } finally {
             setLoading(false);
         }
+    };
+
+    const captureBusinessLocation = () => {
+        if (!navigator.geolocation) { setError('This browser cannot provide precise GPS location.'); return; }
+        setError('');
+        navigator.geolocation.getCurrentPosition((position) => setCoordinates({ latitude: position.coords.latitude, longitude: position.coords.longitude }), () => setError('Allow location access while at the farm or retail shop to enable accurate delivery maps.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    };
+
+    const saveBusinessLocation = async () => {
+        if (!locationSetup || !coordinates || locationValue.trim().length < 5) { setError('Enter the full farm/shop address and capture its GPS location.'); return; }
+        setLocationSaving(true); setError('');
+        try {
+            const response = await fetch('/api/profile/location', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: locationValue.trim(), ...coordinates }) });
+            const result = await response.json();
+            if (!result.success) throw new Error(result.error?.message || 'Could not save this business location.');
+            router.replace(dashboardForRole(locationSetup.role)); router.refresh();
+        } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save this business location.'); }
+        finally { setLocationSaving(false); }
     };
 
     return (
@@ -194,6 +225,7 @@ export default function LoginPage() {
                             Create account
                         </Link>
                     </div>
+                    {locationSetup && <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4"><section className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-widest text-emerald-800">Location required for live delivery</p><h2 className="mt-2 text-xl font-extrabold">Confirm your {locationSetup.role === 'FARMER' ? 'farm' : 'retail shop'} location</h2><p className="mt-2 text-sm leading-6 text-slate-600">This address anchors the farm-to-shop route. Capture GPS while at the actual location; location is shared with the assigned transporter for this order.</p>{error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<label className="mt-4 block text-xs font-bold text-slate-600">Full address<textarea value={locationValue} onChange={(event) => setLocationValue(event.target.value)} rows={3} className="mt-1 w-full rounded-xl border p-3 text-sm font-normal" /></label><button onClick={captureBusinessLocation} className="mt-3 w-full rounded-xl border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-800">{coordinates ? `GPS captured · ${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)} · Refresh GPS` : 'Capture precise GPS at this location'}</button><button disabled={locationSaving || !coordinates} onClick={() => void saveBusinessLocation()} className="mt-3 w-full rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{locationSaving ? 'Saving location…' : 'Save and continue'}</button></section></div>}
                 </div>
             </div>
         </div>

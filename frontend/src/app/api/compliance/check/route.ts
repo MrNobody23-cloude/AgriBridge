@@ -12,7 +12,7 @@ import type { ApiSource } from '@/lib/api-types';
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
 export async function POST(req: NextRequest) {
-    const authResult = await requireAuth(req, ['EXPORTER', 'REGULATOR', 'ADMIN', 'FARMER', 'IMPORTER', 'RETAILER']);
+    const authResult = await requireAuth(req, ['ADMIN']);
     if (authResult instanceof Response) return authResult;
 
     try {
@@ -24,10 +24,6 @@ export async function POST(req: NextRequest) {
         if (!shipment) {
             return errorResponse(`Shipment ${validated.shipmentId} not found`, 'SHIPMENT_NOT_FOUND', 404);
         }
-        if (authResult.user.role === 'EXPORTER' && shipment.exporterId !== authResult.user.id) {
-            return errorResponse('You can only review your own export shipments', 'FORBIDDEN', 403);
-        }
-
         // The `include: { batch: { include: { product, certificates } }, complianceChecks }`
         // this used to fetch is not read below — the crop falls back to the
         // product name, and the old checks are deleted rather than compared —

@@ -13,7 +13,7 @@ import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 export async function POST(req: NextRequest) {
     // IoT devices may use a service token; consumers/admins can post simulated readings
-    const authResult = await requireAuth(req, ['TRANSPORTER', 'FARMER', 'EXPORTER', 'ADMIN']);
+    const authResult = await requireAuth(req, ['FARMER', 'ADMIN']);
     if (authResult instanceof NextResponse) return authResult;
 
     try {

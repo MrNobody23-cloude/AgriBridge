@@ -58,13 +58,12 @@ function buildKnowledgeDocuments(batch: BatchDetail, chainVerification: { status
         docs.push({
             document_id: `shipment:${shipment._id}`,
             title: `Shipment ${shipment.shipmentCode} for ${batch.batchCode}`,
-            source: 'AgriBridge exporter/importer shipment feed',
+            source: 'AgriBridge domestic supply-chain shipment feed',
             verification: 'MongoDB shipment feed',
             content: feedJson({
                 shipmentCode: shipment.shipmentCode, destinationCountry: shipment.destinationCountry,
                 quantity: shipment.quantity, unit: shipment.unit, status: shipment.status,
                 riskScore: shipment.riskScore, estimatedArrival: shipment.estimatedArrival,
-                exporterName: shipment.exporter?.name,
                 compliance: shipment.complianceChecks.map((check) => ({
                     country: check.country, requirement: check.requirement, status: check.status,
                     explanation: check.explanation, source: check.source,

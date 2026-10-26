@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
                           location: validated.location || 'Nashik, Maharashtra',
                           state: validated.state || 'Maharashtra',
                           district: validated.district || 'Nashik',
+                          latitude: validated.latitude,
+                          longitude: validated.longitude,
                       },
                   })
                 : {
@@ -46,6 +48,9 @@ export async function POST(req: NextRequest) {
                           password: hashedPassword,
                           role: validated.role,
                           phone: validated.phone,
+                      shopLocation: validated.role === 'RETAILER' ? validated.shopLocation || null : null,
+                      latitude: validated.latitude,
+                      longitude: validated.longitude,
                       })),
                       farmerProfile: null,
                   };

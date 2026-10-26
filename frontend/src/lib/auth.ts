@@ -123,7 +123,7 @@ export async function requireAuth(
         );
     }
 
-    if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(payload.role)) {
+    if (allowedRoles && allowedRoles.length > 0 && payload.role !== 'ADMIN' && !allowedRoles.includes(payload.role)) {
         return NextResponse.json(
             {
                 success: false,
@@ -149,7 +149,7 @@ export async function requirePermission(
     }
 
     const { user } = authResult;
-    if (!hasPermission(user.role as Role, permission)) {
+    if (user.role !== 'ADMIN' && !hasPermission(user.role as Role, permission)) {
         return NextResponse.json(
             {
                 success: false,

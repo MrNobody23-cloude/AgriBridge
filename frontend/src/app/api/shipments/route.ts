@@ -18,8 +18,7 @@ export async function GET(req: NextRequest) {
     const { user } = authResult;
 
     try {
-        // Ownership scoping: exporters only see their own shipments;
-        // regulators/admins/importers/transporters see all.
+        // Ownership scoping keeps operational shipment records role-aware; admins can audit all records.
         const shipments = await listShipmentsForUser(user.role, user.id);
 
         return successResponse(shipments);

@@ -4,12 +4,9 @@ import type { Role } from './permissions';
  * separate so a permission can never accidentally expose another dashboard. */
 export const DASHBOARD_BY_ROLE: Record<Role, string> = {
     FARMER: '/farmer',
-    EXPORTER: '/exporter',
     TRANSPORTER: '/transporter',
-    IMPORTER: '/importer',
     RETAILER: '/retailer',
     CONSUMER: '/consumer',
-    REGULATOR: '/regulator',
     ADMIN: '/admin',
 };
 

@@ -27,6 +27,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return errorResponse(`Batch ${id} not found`, 'BATCH_NOT_FOUND', 404);
         }
 
+        batch.certificates = batch.certificates.map((certificate) => ({
+            ...certificate,
+            verificationStatus: certificate.expiryDate && certificate.expiryDate < new Date() ? 'EXPIRED' : certificate.verificationStatus,
+        }));
+
         if (user?.role === 'FARMER' && batch.farmerId !== user.id) {
             return errorResponse('You can only view your own batch records.', 'FORBIDDEN', 403);
         }

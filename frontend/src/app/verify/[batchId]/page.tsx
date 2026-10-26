@@ -59,6 +59,7 @@ export default function PublicVerifyPage() {
     // is no `batch` wrapper. `chainVerification` and `trustScoreDetails` are the
     // repository's key names; `blockchainVerification` and `trustDetails` are not.
     const batch = data;
+    const certificates = (batch.certificates || []) as Array<{ _id?: string; certificateType?: string; issuer?: string; expiryDate?: string; verificationStatus?: string; fileUrl?: string }>;
     const blockchainVerification = data.chainVerification;
     const trustDetails = data.trustScoreDetails;
     // Three states, not two. A chain that is unconfigured or unreachable has not
@@ -122,7 +123,7 @@ export default function PublicVerifyPage() {
                         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
                             <span className="text-[11px] text-gray-400 font-medium block">Certificates</span>
                             <span className="text-sm font-bold text-[#16a34a]">
-                                {batch.certificates?.length || 0} Verified
+                                {certificates.filter((certificate) => certificate.verificationStatus === 'VERIFIED').length} verified and in date / {certificates.length} recorded
                             </span>
                         </div>
                         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
@@ -144,6 +145,17 @@ export default function PublicVerifyPage() {
                             </p>
                         </div>
                     )}
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm space-y-3">
+                    <h2 className="text-base font-bold text-[#1a1a1a]">FSSAI and batch certificates</h2>
+                    {certificates.length === 0 ? <p className="text-sm text-gray-500">No certificates are recorded for this batch.</p> : certificates.map((certificate, index) => (
+                        <article key={certificate._id || index} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-bold">{certificate.certificateType || 'Certificate'} · {certificate.verificationStatus || 'PENDING'}</p>{certificate.fileUrl && <a href={certificate.fileUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-700 underline">Open document</a>}</div>
+                            <p className="mt-1 text-xs text-gray-600">Issuer: {certificate.issuer || 'Not recorded'} · Expires {certificate.expiryDate ? new Date(certificate.expiryDate).toLocaleDateString() : 'Not specified'}</p>
+                        </article>
+                    ))}
+                    <p className="text-[11px] leading-5 text-gray-500">VERIFIED or REJECTED reflects the recorded regulator decision. A file hash or IPFS copy alone confirms document integrity only, not issuer authenticity.</p>
                 </div>
 
                 {/* Cryptographic Proof */}
@@ -186,6 +198,7 @@ export default function PublicVerifyPage() {
                                         <span className="text-[10px] text-gray-400">{new Date(evt.timestamp).toLocaleString()}</span>
                                     </div>
                                     <p className="text-xs text-gray-600 mt-0.5">{evt.metadata || evt.location}</p>
+                                    {evt.blockchainTransactionHash && <p className="mt-1 break-all font-mono text-[10px] text-purple-700">On-chain event transaction: {evt.blockchainTransactionHash}</p>}
                                 </div>
                             </div>
                         ))}

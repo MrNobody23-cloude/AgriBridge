@@ -251,9 +251,8 @@ export interface ListFraudAlertsOptions {
     limit: number;
     offset: number;
     /**
-     * Who is asking. A FARMER sees only alerts on their own batches; an
-     * EXPORTER sees only alerts on their own shipments. Everyone else — ADMIN,
-     * REGULATOR, CONSUMER — sees all of them, which is what an unfiltered
+     * Who is asking. A FARMER sees only alerts on their own batches. ADMIN and
+     * CONSUMER see all of them, which is what an unfiltered
      * Prisma `findMany` did.
      */
     role: string;

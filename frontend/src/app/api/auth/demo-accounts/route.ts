@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 
 const demoAccounts = [
-    { email: 'farmer@agribridge.test', name: 'Test Farmer', role: 'FARMER' },
-    { email: 'exporter@agribridge.test', name: 'Test Exporter', role: 'EXPORTER' },
+    { email: 'farmer@agribridge.test', name: 'Test Farmer', role: 'FARMER', defaultLocation: 'Sr. No. 47, Village - Avachitwadi, Goti, Igatpuri, Takeghoti, Nashik-422402, Maharashtra' },
     { email: 'transporter@agribridge.test', name: 'Test Transporter', role: 'TRANSPORTER' },
-    { email: 'importer@agribridge.test', name: 'Test Importer', role: 'IMPORTER' },
-    { email: 'retailer@agribridge.test', name: 'Test Retailer', role: 'RETAILER' },
+    { email: 'retailer@agribridge.test', name: 'Test Retailer', role: 'RETAILER', defaultLocation: 'Limbani Darshan, Near Tilak Nagar, Kalyan Road, Dombivli East, Thane-421201, Maharashtra' },
     { email: 'consumer@agribridge.test', name: 'Test Consumer', role: 'CONSUMER' },
-    { email: 'regulator@agribridge.test', name: 'Test Regulator', role: 'REGULATOR' },
     { email: 'admin@agribridge.test', name: 'Test Admin', role: 'ADMIN' },
 ];
 

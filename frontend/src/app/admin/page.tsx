@@ -1,169 +1,52 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Users, Shield, Activity, AlertTriangle, ChevronRight, RefreshCw } from 'lucide-react';
 
-interface SysUser {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    createdAt: string;
-}
+const collections = ['users', 'batches', 'certificates', 'orders', 'inventory', 'fraud', 'shipments', 'events', 'audit'] as const;
+type RecordRow = Record<string, unknown> & { id: string; _id: string };
 
 export default function AdminDashboard() {
-    const [users, setUsers] = useState<SysUser[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const fetchUsers = async () => {
-        try {
-            const res = await fetch('/api/admin/users');
-            const json = await res.json();
-            if (json.success) setUsers(json.data || []);
-        } catch (e) {
-            console.error('Failed to fetch users:', e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        // `loading` initialises to `true` and is never set back at the top of
-        // the loader, so the first paint is the spinner and nothing triggers a
-        // render before the request resolves.
-        Promise.resolve().then(fetchUsers);
-    }, []);
-
-    const roleBadgeColor: Record<string, string> = {
-        FARMER: 'bg-green-100 text-green-700',
-        EXPORTER: 'bg-blue-100 text-blue-700',
-        TRANSPORTER: 'bg-amber-100 text-amber-700',
-        IMPORTER: 'bg-purple-100 text-purple-700',
-        RETAILER: 'bg-pink-100 text-pink-700',
-        CONSUMER: 'bg-gray-100 text-gray-700',
-        REGULATOR: 'bg-orange-100 text-orange-700',
-        ADMIN: 'bg-red-100 text-red-700',
-    };
-
-    // "Fraud Alerts: 12" and "Secure Routes: 24" were typed-in constants, and
-    // a 400ms setTimeout above was there to make them look as though they had
-    // loaded. Nothing on this page counts either, and there is no session
-    // table, so each tile now says so rather than inventing a figure.
-    const statCards = [
-        { label: 'Total Users', value: users.length || '–', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50/80' },
-        { label: 'Active Sessions', value: 'Not tracked', icon: Activity, color: 'text-gray-500', bg: 'bg-gray-50/80' },
-        { label: 'Fraud Alerts', value: 'See regulator view', icon: AlertTriangle, color: 'text-gray-500', bg: 'bg-gray-50/80' },
-        { label: 'Protected Routes', value: 'Not tracked', icon: Shield, color: 'text-gray-500', bg: 'bg-gray-50/80' },
-    ];
-
-    return (
-        <DashboardLayout title="System Administration">
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {statCards.map((s, idx) => (
-                    <div key={idx} className="glass-card p-5 flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center flex-shrink-0`}>
-                            <s.icon className={`w-5 h-5 ${s.color}`} />
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{s.label}</p>
-                            <p className={`text-2xl font-extrabold ${s.color} mt-0.5`}>{s.value}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* User Management Table */}
-            <div className="glass-card overflow-hidden">
-                <div className="px-6 py-4 border-b border-white/40 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-base font-bold text-[#1a1a1a]">Platform Users</h2>
-                        <p className="text-[11px] text-gray-500 mt-0.5">All registered accounts across all roles</p>
-                    </div>
-                    <button
-                        onClick={() => { setLoading(true); fetchUsers(); }}
-                        className="flex items-center gap-1.5 text-xs font-bold text-agro-green hover:text-green-800 transition-colors"
-                    >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Refresh
-                    </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                        <thead className="bg-white/20 border-b border-white/40">
-                            <tr className="text-[10px] uppercase font-extrabold tracking-wider text-gray-500">
-                                <th className="py-3 px-5">Name</th>
-                                <th className="py-3 px-5">Email</th>
-                                <th className="py-3 px-5">Role</th>
-                                <th className="py-3 px-5">Joined</th>
-                                <th className="py-3 px-5 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/30">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={5} className="py-12 text-center text-sm text-gray-500 font-medium">
-                                        <div className="flex items-center justify-center gap-2">
-                                            <span className="w-4 h-4 border-2 border-agro-green border-t-transparent rounded-full animate-spin"></span>
-                                            Loading users...
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : users.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="py-12 text-center text-sm text-gray-500 italic">
-                                        No users found. The database may not be configured.
-                                    </td>
-                                </tr>
-                            ) : (
-                                users.map((u) => (
-                                    <tr key={u.id} className="hover:bg-white/20 transition-colors">
-                                        <td className="py-3.5 px-5 font-bold text-[#1a1a1a]">{u.name}</td>
-                                        <td className="py-3.5 px-5 text-gray-600 font-mono">{u.email}</td>
-                                        <td className="py-3.5 px-5">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${roleBadgeColor[u.role] || 'bg-gray-100 text-gray-600'}`}>
-                                                {u.role}
-                                            </span>
-                                        </td>
-                                        <td className="py-3.5 px-5 text-gray-500">
-                                            {new Date(u.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                        </td>
-                                        <td className="py-3.5 px-5 text-right">
-                                            <button className="text-agro-green text-xs font-bold hover:underline inline-flex items-center gap-0.5">
-                                                Manage <ChevronRight className="w-3 h-3" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* RBAC Policy Overview */}
-            <div className="glass-card p-6">
-                <h2 className="text-base font-bold mb-4">RBAC Policy Matrix</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {['FARMER', 'EXPORTER', 'TRANSPORTER', 'IMPORTER', 'RETAILER', 'CONSUMER', 'REGULATOR', 'ADMIN'].map((role) => (
-                        <div key={role} className={`${roleBadgeColor[role]} px-3 py-2.5 rounded-xl border border-white/60`}>
-                            <p className="text-[10px] uppercase font-extrabold tracking-wider">{role}</p>
-                            <p className="text-xs font-semibold mt-0.5 opacity-80">
-                                {role === 'FARMER' ? '3 permissions'
-                                    : role === 'EXPORTER' ? '6 permissions'
-                                        : role === 'TRANSPORTER' ? '4 permissions'
-                                            : role === 'IMPORTER' ? '5 permissions'
-                                                : role === 'RETAILER' ? '4 permissions'
-                                                    : role === 'CONSUMER' ? '3 permissions'
-                                                        : role === 'REGULATOR' ? '8 permissions'
-                                                            : '14 permissions'}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </DashboardLayout>
-    );
+  const [collection, setCollection] = useState<string>('users');
+  const [records, setRecords] = useState<RecordRow[]>([]);
+  const [selected, setSelected] = useState<RecordRow | null>(null);
+  const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [reviewNotes, setReviewNotes] = useState('');
+  const refresh = useCallback(async () => {
+    setLoading(true); setError('');
+    try { const response = await fetch(`/api/admin/records?collection=${collection}`); const json = await response.json(); if (!json.success) throw new Error(json.error?.message || 'Could not load records.'); setRecords(json.data || []); setSelected(null); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load records.'); } finally { setLoading(false); }
+  }, [collection]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch synchronizes the record list with the selected collection.
+  useEffect(() => { void refresh(); }, [refresh]);
+  function choose(record: RecordRow) { setSelected(record); setDraft(JSON.stringify(record, null, 2)); setMessage(''); }
+  async function mutate(method: 'PATCH' | 'DELETE') {
+    if (!selected) return;
+    setError(''); setMessage('');
+    try {
+      let body: Record<string, unknown>;
+      if (method === 'DELETE') { if (!window.confirm(`Permanently delete this ${collection} record?`)) return; body = { collection, id: selected.id || selected._id }; }
+      else { const parsed = JSON.parse(draft) as Record<string, unknown>; body = { collection, id: selected.id || selected._id, changes: parsed }; }
+      const response = await fetch('/api/admin/records', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const json = await response.json(); if (!json.success) throw new Error(json.error?.message || 'Record action failed.');
+      setMessage(method === 'DELETE' ? 'Record deleted.' : 'Record updated and audit logged.'); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Record action failed.'); }
+  }
+  async function reviewCertificate(decision: 'VERIFIED' | 'REJECTED') {
+    if (!selected) return;
+    setError(''); setMessage('');
+    try {
+      const response = await fetch('/api/admin/certificates', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ certificateId: selected.id || selected._id, decision, notes: reviewNotes }) });
+      const json = await response.json(); if (!json.success) throw new Error(json.error?.message || 'Certificate review failed.');
+      setMessage(`Certificate ${decision.toLowerCase()} and ledger/audit event recorded.`); setReviewNotes(''); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Certificate review failed.'); }
+  }
+  return <DashboardLayout title="Administration · full record access">
+    <section className="rounded-2xl bg-gradient-to-r from-slate-950 to-emerald-950 p-6 text-white"><p className="text-xs font-bold uppercase tracking-widest text-emerald-200">Administrative control</p><h1 className="mt-2 text-2xl font-extrabold">Review and manage platform records</h1><p className="mt-2 max-w-3xl text-sm text-white/70">Admins can inspect all records, edit supported fields, delete mutable records, and review certificates. Trace events and audit records remain append-only for accountability.</p></section>
+    {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}{message && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p>}
+    <section className="grid gap-5 xl:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]"><article className="overflow-hidden rounded-2xl border bg-white"><div className="flex items-center gap-2 border-b p-4"><select value={collection} onChange={(e) => setCollection(e.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm">{collections.map((name) => <option key={name} value={name}>{name[0].toUpperCase() + name.slice(1)}</option>)}</select><button onClick={() => void refresh()} className="rounded-lg border px-3 py-2 text-sm">Refresh</button></div><div className="max-h-[70vh] divide-y overflow-y-auto">{loading ? <p className="p-8 text-center text-sm text-slate-500">Loading records…</p> : records.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No records found.</p> : records.map((record) => <button key={record.id || record._id} onClick={() => choose(record)} className={`w-full p-3 text-left hover:bg-emerald-50 ${selected?.id === record.id ? 'bg-emerald-50' : ''}`}><p className="truncate text-sm font-bold">{String(record.name || record.batchCode || record.certificateType || record.status || record._id)}</p><p className="mt-1 truncate font-mono text-[10px] text-slate-500">{String(record.email || record.id || record._id)}</p></button>)}</div><p className="border-t p-3 text-[11px] text-slate-500">Showing up to 200 recent records. Use record details for supported edits.</p></article>
+      <article className="space-y-3 rounded-2xl border bg-white p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">Record editor</h2><p className="text-xs text-slate-500">Fields are allowlisted by record type and changes are written to audit log.</p></div>{selected && <div className="flex gap-2"><button disabled={['events', 'audit'].includes(collection)} onClick={() => void mutate('PATCH')} className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">Save edits</button><button disabled={['events', 'audit'].includes(collection)} onClick={() => void mutate('DELETE')} className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">Delete</button></div>}</div>{selected ? <><textarea value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} className="min-h-[55vh] w-full rounded-xl border bg-slate-950 p-4 font-mono text-xs leading-5 text-emerald-100" />{collection === 'certificates' && selected.verificationStatus === 'PENDING' && <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-xs font-bold text-amber-900">Certificate review · decisions are recorded on the batch timeline and audit trail</p><textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} minLength={10} maxLength={1000} placeholder="Review evidence and explain the decision (10–1000 characters)" className="w-full rounded-lg border bg-white p-2 text-sm" /><div className="flex gap-2"><button disabled={reviewNotes.trim().length < 10} onClick={() => void reviewCertificate('VERIFIED')} className="rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Verify certificate</button><button disabled={reviewNotes.trim().length < 10} onClick={() => void reviewCertificate('REJECTED')} className="rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Reject certificate</button></div></div>}<p className="text-[11px] text-slate-500">Only API allowlisted fields change. Immutable events and audit entries cannot be edited or deleted.</p></> : <div className="grid min-h-72 place-items-center rounded-xl border border-dashed text-sm text-slate-500">Choose a record to inspect and manage.</div>}</article></section>
+  </DashboardLayout>;
 }

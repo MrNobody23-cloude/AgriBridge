@@ -20,7 +20,7 @@ const simulatorRequestSchema = z.object({
 // CLEARLY IDENTIFIED AS SIMULATED — never presented as real sensor data.
 
 export async function POST(req: NextRequest) {
-    const authResult = await requireAuth(req, ['TRANSPORTER', 'FARMER', 'EXPORTER', 'ADMIN']);
+    const authResult = await requireAuth(req, ['FARMER', 'ADMIN']);
     if (authResult instanceof Response) return authResult;
 
     try {

@@ -9,6 +9,7 @@ import { calculateTrustScore } from '@/lib/services/trustScoreService';
 import { successResponse, errorResponse } from '@/lib/response';
 import { requireAuth } from '@/lib/auth';
 import { createAuditLog } from '@/lib/auditLog';
+import { recordSupplyChainEventOnChain } from '@/lib/blockchain';
 import { isZodError, firstValidationMessage } from '@/lib/zod-error';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
@@ -109,10 +110,10 @@ async function pinCertificateToPinata(
  * verifies SHA-256 hash integrity against both the DB and optionally the IPFS CID,
  * stores the certificate, triggers fraud scan, and recalculates Trust Score.
  *
- * Required roles: FARMER, EXPORTER, REGULATOR, ADMIN
+ * Required role: the farmer who owns the batch
  */
 export async function POST(req: NextRequest) {
-    const session = await requireAuth(req, ['FARMER', 'EXPORTER', 'REGULATOR', 'ADMIN']);
+    const session = await requireAuth(req, ['FARMER']);
     if ('status' in session) return session;
 
     try {
@@ -149,10 +150,9 @@ export async function POST(req: NextRequest) {
             return errorResponse('Batch not found', 'BATCH_NOT_FOUND', 404);
         }
 
-        // Only the batch owner, exporters, regulators, and admins can upload certificates
+        // Certificates must be uploaded by the farmer who owns the batch.
         const isOwner = batch.farmerId === session.user.id;
-        const isPrivileged = ['EXPORTER', 'REGULATOR', 'ADMIN'].includes(session.user.role);
-        if (!isOwner && !isPrivileged) {
+        if (!isOwner) {
             return errorResponse('Not authorized to upload certificates for this batch', 'FORBIDDEN', 403);
         }
 
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
                 duplicateDetected = true; // Treat as a trust violation
                 fraudReason = `IPFS content hash mismatch: declared ${validated.fileHash.slice(0, 16)}… but IPFS computed ${ipfsCheck.computedHash?.slice(0, 16) ?? 'unknown'}…`;
             }
-            if (ipfsVerified && !duplicateDetected) verificationStatus = 'VERIFIED';
+            if (ipfsVerified && !duplicateDetected) verificationStatus = validated.certificateType.toUpperCase().includes('FSSAI') ? 'PENDING' : 'VERIFIED';
         }
 
         // ── 4. Persist Certificate ───────────────────────────────────────────────
@@ -226,19 +226,32 @@ export async function POST(req: NextRequest) {
             verificationStatus,
         });
 
+        const certificateEventMetadata = JSON.stringify({
+            certificateId: certificate._id,
+            certificateType: validated.certificateType,
+            verificationStatus,
+            fileHash: validated.fileHash,
+            ipfsHash: ipfsHash || null,
+            ipfsIntegrityVerified: ipfsVerified,
+            issuer: validated.issuer,
+            expiryDate: validated.expiryDate,
+        });
+        const certificateEventType = validated.certificateType.toUpperCase().includes('FSSAI') ? 'FSSAI_CERTIFICATE_UPLOADED' : 'CERTIFICATE_UPLOADED';
+        const ledger = await recordSupplyChainEventOnChain({
+            batchCode: batch.batchCode,
+            eventType: certificateEventType,
+            actorRole: session.user.role,
+            location: batch.location,
+            metadata: certificateEventMetadata,
+        });
         await createSupplyChainEvent({
             batchId: batch._id,
-            eventType: 'CERTIFICATE_UPLOADED',
+            eventType: certificateEventType,
             actorId: session.user.id,
             actorRole: session.user.role,
             location: batch.location,
-            metadata: JSON.stringify({
-                certificateId: certificate._id,
-                certificateType: validated.certificateType,
-                verificationStatus,
-                fileHash: validated.fileHash,
-                ipfsHash: ipfsHash || null,
-            }),
+            metadata: JSON.stringify({ ...JSON.parse(certificateEventMetadata), ledgerStatus: ledger.reason || 'ANCHORED' }),
+            blockchainTransactionHash: ledger.transactionHash,
         });
 
         // ── 5. Fraud Alert if suspicious ────────────────────────────────────────
@@ -283,11 +296,13 @@ export async function POST(req: NextRequest) {
             fraudAlerts,
             ipfsVerified,
             ipfsHashMismatch,
+            blockchainTransactionHash: ledger.transactionHash,
+            blockchainStatus: ledger.transactionHash ? 'ANCHORED' : ledger.reason,
             message: duplicateDetected
                 ? `⚠️ FRAUD ALERT: ${fraudReason} Certificate flagged for Regulator review.`
                 : ipfsVerified
                     ? `Certificate bytes were matched against the IPFS copy (${ipfsHash}). Issuer authenticity is not independently confirmed.`
-                    : 'Certificate recorded as pending verification. File integrity or issuer authenticity has not been confirmed.',
+                : 'Certificate recorded for regulator review. File integrity or issuer authenticity has not been confirmed.',
         });
     } catch (error: unknown) {
         if (isZodError(error)) {

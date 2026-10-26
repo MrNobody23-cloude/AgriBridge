@@ -1,358 +1,129 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ExternalLink, MapPin, Navigation, RefreshCw, ShieldCheck, Truck, KeyRound } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
-import { errText } from '@/lib/err';
+import OrderRouteMap from '@/components/OrderRouteMap';
 
-interface TempLog {
-  id: string;
-  temperature: number;
-  humidity?: number;
-  location: string;
-  timestamp: string;
-  sensorId?: string;
-  /** The simulator writes rows with this flag set. A reading without it came
-      from a physical sensor. The two must not be displayed as one column. */
-  isSimulated?: boolean;
-}
+/* eslint-disable @typescript-eslint/no-explicit-any -- the detail response is a compact server join over the shared Mongoose registry. */
 
-interface ColdChainStats {
-  totalReadings: number;
-  simulatedReadings: number;
-  realReadings: number;
-  temperature: { min: number; max: number; avg: number; breaches: number; breachPercent: number } | null;
-  humidity: { min: number; max: number; avg: number } | null;
+type DeliveryOrder = { _id: string; status: string; transporterLatitude?: number | null; transporterLongitude?: number | null; lastLocationAt?: string | null; batchCode: string; retailerName: string; retailerLocation: string; retailerLatitude?: number | null; retailerLongitude?: number | null };
+
+type Offer = {
+  _id: string; batchId: string; pricePerUnit: number; currency: string; retailerLocation: string;
+  latitude?: number | null; longitude?: number | null; status: string; commissionAmount?: number;
+  farmerPayoutAmount?: number; grossOrderValue?: number; batch: { batchCode: string; quantity: number; unit: string; harvestDate: string; actualHarvestDate?: string; product?: { name: string }; farmer?: { name: string; phone?: string }; fssaiCertificate?: { _id: string; certificateType: string; issuer: string; expiryDate: string; verificationStatus: string; fileUrl?: string; blockchainTransactionHash?: string } | null };
+  retailer?: { id: string; name: string; phone?: string } | null;
+};
+
+function mapsSearch(address: string) { return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`; }
+function mapsDirections(offer: Offer, origin?: string) {
+  const destination = offer.latitude != null && offer.longitude != null ? `${offer.latitude},${offer.longitude}` : offer.retailerLocation;
+  const query = new URLSearchParams({ api: '1', destination });
+  if (origin) query.set('origin', origin);
+  return `https://www.google.com/maps/dir/?${query.toString()}`;
 }
 
 export default function TransporterDashboard() {
-  // Empty by default. Both batch fields were pre-filled with
-  // 'AGR-2026-UK-284701', so on load this page immediately fetched and
-  // displayed the cold-chain history of one specific batch that the operator
-  // had not chosen — readings, averages and breach rates for someone else's
-  // consignment.
-  const [batchId, setBatchId] = useState('');
-  const [history, setHistory] = useState<TempLog[]>([]);
-  const [stats, setStats] = useState<ColdChainStats | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [simLoading, setSimLoading] = useState(false);
-  const [simBatchId, setSimBatchId] = useState('');
-  const [simSensorId, setSimSensorId] = useState('IOT-REEFER-001');
-  const [simHours, setSimHours] = useState('24');
-  const [simMsg, setSimMsg] = useState('');
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [accepted, setAccepted] = useState<Offer | null>(null);
+  const [origin, setOrigin] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [orderDetail, setOrderDetail] = useState<any>(null);
+  const [otp, setOtp] = useState('');
+  const [gps, setGps] = useState<{ latitude: number; longitude: number } | null>(null);
+  const selected = offers.find((offer) => offer._id === selectedId) || null;
+  const highest = useMemo(() => {
+    const best = new Map<string, number>();
+    for (const offer of offers) if (!best.has(offer.batchId)) best.set(offer.batchId, offer.pricePerUnit);
+    return best;
+  }, [offers]);
 
-  // Manual reading state
-  const [manualTemp, setManualTemp] = useState('12.5');
-  const [manualHumidity, setManualHumidity] = useState('85');
-  const [manualLocation, setManualLocation] = useState('Arabian Sea Vessel');
-  const [postingReading, setPostingReading] = useState(false);
-
-  const fetchHistory = async (code?: string) => {
-    const target = code || batchId;
-    if (!target) return;
-    setLoading(true);
+  const refresh = useCallback(async () => {
+    setLoading(true); setError('');
     try {
-      const res = await fetch(`/api/iot/batches/${encodeURIComponent(target)}/history`);
-      const json = await res.json();
-      if (json.success) {
-        // The route returns { batch, readings, summary }. This page read
-        // `json.data.logs` and `json.data.stats`, which that response has
-        // never contained, so the cold-chain table was permanently empty no
-        // matter what data existed. Corrected to the real keys.
-        setHistory(json.data.readings || []);
-        setStats(json.data.summary || null);
-      }
-    } catch (e) {
-      console.error('Failed to load cold-chain history:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const response = await fetch('/api/marketplace/offers'); const json = await response.json();
+      if (!json.success) throw new Error(json.error?.message || 'Could not load retailer offers.');
+      setOffers(json.data || []); setSelectedId((current) => current && (json.data || []).some((item: Offer) => item._id === current) ? current : (json.data?.[0]?._id || ''));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load offers.'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { Promise.resolve().then(refresh); }, [refresh]);
+
+  const refreshOrders = useCallback(async () => { const response = await fetch('/api/marketplace/orders'); const json = await response.json(); if (json.success) setOrders(json.data || []); }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial polling synchronizes assigned deliveries from the API.
+  useEffect(() => { void refreshOrders(); const timer = window.setInterval(() => void refreshOrders(), 8000); return () => window.clearInterval(timer); }, [refreshOrders]);
+  const activeOrder = orders.find((order) => order._id === (selectedId || accepted?._id) && order.status !== 'DELIVERED');
+  const activeOrderId = activeOrder?._id;
+  const activeOrderStatus = activeOrder?.status;
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loads server-owned order detail whenever selected delivery state changes.
+  useEffect(() => { if (!activeOrderId) { setOrderDetail(null); return; } let cancelled = false; void fetch(`/api/marketplace/orders/${activeOrderId}`).then((response) => response.json()).then((json) => { if (!cancelled && json.success) setOrderDetail(json.data); }).catch(() => {}); return () => { cancelled = true; }; }, [activeOrderId, activeOrderStatus]);
 
   useEffect(() => {
-    // Unlike the other dashboards, `loading` starts `false` here — there is no
-    // batch to look up on arrival, so the page prompts for a code rather than
-    // spinning — and `fetchHistory` returns before fetching when none is set.
-    // The `setLoading(true)` it does perform is kept for the manual reload, and
-    // the call is deferred so no `setState` runs inside the effect body.
-    Promise.resolve().then(() => fetchHistory());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!activeOrderId || !['IN_TRANSIT', 'DELIVERY_OTP_PENDING'].includes(activeOrderStatus || '') || !navigator.geolocation) return;
+    let lastSent = 0;
+    const watch = navigator.geolocation.watchPosition((position) => {
+      const point = { latitude: position.coords.latitude, longitude: position.coords.longitude }; setGps(point);
+      if (Date.now() - lastSent < 8000) return; lastSent = Date.now();
+      void fetch(`/api/marketplace/orders/${activeOrderId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'TRACK_LOCATION', ...point }) }).then(() => void refreshOrders());
+    }, () => setError('Allow location access to share live delivery tracking.'), { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+    return () => navigator.geolocation.clearWatch(watch);
+  }, [activeOrderId, activeOrderStatus, refreshOrders]);
 
-  const handleSimulate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!simBatchId.trim()) {
-      setSimMsg('Enter a batch code before running the simulator.');
-      return;
-    }
-    setSimLoading(true);
-    setSimMsg('');
+  async function transition(order: DeliveryOrder, action: string, extra: Record<string, unknown> = {}) {
+    setSaving(true); setError('');
     try {
-      const res = await fetch('/api/iot/simulator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: simBatchId.trim(),
-          sensorId: simSensorId,
-          // The route destructures `hoursOfData`. This sent `hours`, which
-          // the route never reads, so the duration field was ignored and
-          // every simulation silently ran for the 24-hour default.
-          hoursOfData: parseInt(simHours) || 24,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setSimMsg(`✓ Generated ${json.data.count} simulated IoT readings for ${simBatchId}`);
-        fetchHistory(simBatchId);
-      } else {
-        setSimMsg(json.error?.message || 'Simulation failed');
-      }
-    } catch (err: unknown) {
-      setSimMsg(errText(err) || 'Error running simulator');
-    } finally {
-      setSimLoading(false);
-    }
-  };
+      let location = gps;
+      if (['START_PICKUP', 'START_DELIVERY'].includes(action) && navigator.geolocation) location = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition((p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }), () => reject(new Error('Enable GPS to verify you are at the pickup/delivery location.')), { enableHighAccuracy: true, timeout: 15000 }));
+      const response = await fetch(`/api/marketplace/orders/${order._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(location || {}), ...extra }) }); const json = await response.json();
+      if (!json.success) throw new Error(json.error?.message || 'Could not update delivery.');
+      setOtp(''); await refreshOrders();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not update delivery.'); }
+    finally { setSaving(false); }
+  }
 
-  const handlePostReading = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // A reading has to belong to a batch. With the lookup field now empty by
-    // default, this would otherwise post an unattributed reading.
-    if (!batchId.trim()) {
-      setSimMsg('Load a batch code above before posting a reading.');
-      return;
-    }
-    setPostingReading(true);
-    setSimMsg('');
+  async function acceptOffer(offer: Offer) {
+    if (!window.confirm(`Accept ${offer.retailer?.name || 'this retailer'} at ₹${offer.pricePerUnit}/${offer.batch.unit}?`)) return;
+    setSaving(true); setError('');
     try {
-      const res = await fetch('/api/iot/readings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: batchId.trim(),
-          sensorId: simSensorId,
-          temperature: parseFloat(manualTemp),
-          humidity: parseFloat(manualHumidity),
-          location: manualLocation,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        fetchHistory();
-        setSimMsg(`✓ Reading posted: ${manualTemp}°C ${json.data.fraudAlert ? '⚠️ TEMPERATURE BREACH DETECTED' : ''}`);
-      } else {
-        setSimMsg(json.error?.message || 'Failed to post reading');
-      }
-    } catch (err: unknown) {
-      setSimMsg(errText(err) || 'Error posting reading');
-    } finally {
-      setPostingReading(false);
-    }
-  };
+      const response = await fetch('/api/marketplace/offers', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offerId: offer._id }) });
+      const json = await response.json(); if (!json.success) throw new Error(json.error?.message || 'Offer acceptance failed.');
+      setAccepted({ ...offer, ...json.data, status: 'ACCEPTED' }); await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Offer acceptance failed.'); }
+    finally { setSaving(false); }
+  }
 
-  const getTempColor = (temp: number) => {
-    if (temp > 20) return 'text-red-600 bg-red-50';
-    if (temp > 15) return 'text-amber-600 bg-amber-50';
-    return 'text-[#16a34a] bg-green-50';
-  };
+  function useLocation() {
+    if (!navigator.geolocation) { setError('Location is not available in this browser.'); return; }
+    navigator.geolocation.getCurrentPosition((position) => setOrigin(`${position.coords.latitude},${position.coords.longitude}`), () => setError('Location permission was not granted. You can enter an origin manually.'));
+  }
 
-  return (
-    <DashboardLayout title="Transporter Dashboard">
-      {/* Top Banner Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Cold-Chain Readings</p>
-            <p className="text-2xl font-extrabold text-[#1a1a1a] mt-1">{stats?.totalReadings ?? history.length}</p>
-            {/* "IoT Sensor Active" was unconditional. The API splits readings
-                into sensor-reported and simulated, so the count of real
-                readings is known — report it rather than asserting a live
-                sensor exists. */}
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
-              {stats ? `${stats.realReadings} from sensors` : 'No readings yet'}
-            </span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xl">🌡️</div>
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Avg Temperature</p>
-            {/* The summary nests temperature under `temperature`, not at the
-                top level as this page previously assumed. */}
-            <p className="text-2xl font-extrabold text-[#16a34a] mt-1">
-              {stats?.temperature ? `${stats.temperature.avg.toFixed(1)}°C` : '—'}
-            </p>
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">Target: 10–15°C</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-green-100 text-[#16a34a] flex items-center justify-center text-xl">❄️</div>
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Temperature Breaches</p>
-            <p className={`text-2xl font-extrabold mt-1 ${(stats?.temperature?.breaches ?? 0) > 0 ? 'text-red-600' : 'text-[#16a34a]'}`}>
-              {stats?.temperature?.breaches ?? 0}
-            </p>
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">
-              {stats?.temperature ? `${stats.temperature.breachPercent}% breach rate` : 'No data'}
-            </span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-xl">⚠️</div>
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Cold-Chain Range</p>
-            <p className="text-sm font-extrabold text-[#1a1a1a] mt-1">
-              {stats?.temperature ? `${stats.temperature.min.toFixed(1)}°C – ${stats.temperature.max.toFixed(1)}°C` : '—'}
-            </p>
-            <span className="text-[11px] font-semibold text-gray-500 block mt-1">Min / Max observed</span>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">📊</div>
-        </div>
-      </div>
-
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Controls Panel */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Batch Lookup */}
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
-            <h2 className="text-sm font-bold text-[#1a1a1a]">🔍 Load Cold-Chain History</h2>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={batchId}
-                onChange={(e) => setBatchId(e.target.value)}
-                className="flex-1 text-xs font-mono font-bold text-[#16a34a] p-2.5 bg-[#FAFAF7] border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#16a34a] focus:outline-none"
-                placeholder="AGR-2026-UK-284701"
-              />
-              <button
-                onClick={() => fetchHistory()}
-                disabled={loading}
-                className="px-3 py-2 bg-[#16a34a] text-white text-xs font-bold rounded-xl hover:bg-green-700"
-              >
-                {loading ? '...' : 'Load'}
-              </button>
-            </div>
-          </div>
-
-          {/* Manual Reading */}
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
-            <h2 className="text-sm font-bold text-[#1a1a1a]">📡 Post Manual IoT Reading</h2>
-            <form onSubmit={handlePostReading} className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">Temp (°C)</label>
-                  <input type="number" step="0.1" value={manualTemp} onChange={(e) => setManualTemp(e.target.value)}
-                    className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#16a34a]" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase">Humidity (%)</label>
-                  <input type="number" step="0.1" value={manualHumidity} onChange={(e) => setManualHumidity(e.target.value)}
-                    className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#16a34a]" />
-                </div>
-              </div>
-              <input type="text" value={manualLocation} onChange={(e) => setManualLocation(e.target.value)}
-                placeholder="Current location"
-                className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#16a34a]" />
-              <button type="submit" disabled={postingReading}
-                className="w-full py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700">
-                {postingReading ? 'Posting...' : '📡 Submit Reading'}
-              </button>
-            </form>
-          </div>
-
-          {/* IoT Simulator */}
-          <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-xs space-y-3">
-            <h2 className="text-sm font-bold text-[#1a1a1a]">🔬 Simulate Cold-Chain Data</h2>
-            <form onSubmit={handleSimulate} className="space-y-2">
-              <input type="text" value={simBatchId} onChange={(e) => setSimBatchId(e.target.value)}
-                placeholder="Batch code"
-                className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none" />
-              <input type="text" value={simSensorId} onChange={(e) => setSimSensorId(e.target.value)}
-                placeholder="Sensor ID"
-                className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none" />
-              <div>
-                <label className="text-[10px] font-bold text-gray-500 uppercase">Duration (hours)</label>
-                <input type="number" value={simHours} onChange={(e) => setSimHours(e.target.value)}
-                  className="w-full text-xs p-2 bg-[#FAFAF7] border border-gray-200 rounded-lg focus:outline-none" />
-              </div>
-              <button type="submit" disabled={simLoading}
-                className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700">
-                {simLoading ? 'Simulating...' : '🔬 Run Simulator'}
-              </button>
-            </form>
-            {simMsg && (
-              <p className={`text-xs font-semibold ${simMsg.includes('⚠️') ? 'text-red-600' : 'text-[#16a34a]'}`}>{simMsg}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Temperature Log Table */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            {/* This heading said "Real-time" and the table had no
-                simulated/real column, while /api/iot/simulator writes generated
-                readings into the same table with isSimulated set. The
-                simulator marks every row it writes, but that mark was dropped
-                here, so generated temperatures could be read as sensor
-                telemetry. The counts below come from the API's own split. */}
-            <h3 className="text-sm font-bold text-[#1a1a1a]">🌡️ Cold-Chain Log</h3>
-            <div className="flex items-center gap-3 text-xs">
-              {stats && stats.simulatedReadings > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold text-[11px]">
-                  {stats.simulatedReadings} simulated
-                </span>
-              )}
-              <span className="text-gray-500">
-                {stats ? `${stats.realReadings} sensor / ${history.length} total` : `${history.length} readings`}
-              </span>
-            </div>
-          </div>
-          <div className="overflow-y-auto max-h-[500px]">
-            <table className="w-full text-left text-xs text-[#1a1a1a]">
-              <thead className="bg-[#FAFAF7] text-gray-500 font-semibold border-b border-gray-200 text-[11px] uppercase sticky top-0">
-                <tr>
-                  <th className="py-3 px-4">Timestamp</th>
-                  <th className="py-3 px-4">Sensor</th>
-                  <th className="py-3 px-4">Temp</th>
-                  <th className="py-3 px-4">Humidity</th>
-                  <th className="py-3 px-4">Location</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {history.length === 0 ? (
-                  <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-xs">No IoT readings found. Try loading a batch or running the simulator.</td></tr>
-                ) : (
-                  history.map((log, idx) => (
-                    <tr key={log.id || idx} className={log.isSimulated ? 'bg-amber-50/50 hover:bg-amber-50' : 'hover:bg-gray-50'}>
-                      <td className="py-2.5 px-4 font-mono text-[11px] text-gray-500">
-                        {new Date(log.timestamp).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
-                      </td>
-                      <td className="py-2.5 px-4 font-mono text-[11px] text-blue-600">
-                        {log.sensorId || '—'}
-                        {log.isSimulated && (
-                          <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-bold text-[9px] uppercase">
-                            Simulated
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-4">
-                        <span className={`px-2 py-0.5 rounded-full font-extrabold text-[11px] ${getTempColor(log.temperature)}`}>
-                          {log.temperature.toFixed(1)}°C
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 text-gray-600">{log.humidity != null ? `${log.humidity.toFixed(1)}%` : '—'}</td>
-                      <td className="py-2.5 px-4 text-gray-600 truncate max-w-32">{log.location}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </DashboardLayout>
-  );
+  return <DashboardLayout title="Domestic Transport Marketplace">
+    {orders.length > 0 && <section className="space-y-4">{orders.map((order) => { const detail = orderDetail?.order?._id === order._id ? orderDetail : null; const pickupExpired = detail?.order?.pickupOtpExpiresAt && new Date(detail.order.pickupOtpExpiresAt) < new Date(); const deliveryExpired = detail?.order?.deliveryOtpExpiresAt && new Date(detail.order.deliveryOtpExpiresAt) < new Date(); const pickupLocked = (detail?.order?.pickupOtpAttempts || 0) >= 5; const deliveryLocked = (detail?.order?.deliveryOtpAttempts || 0) >= 5; return <article key={order._id} className="space-y-4 rounded-2xl border border-blue-100 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-mono text-xs text-slate-500">{order.batchCode}</p><h2 className="font-bold">Active delivery · {order.retailerName}</h2><p className="text-xs text-slate-500">{order.status.replaceAll('_', ' ')}</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800">{order.status}</span></div>{detail && <OrderRouteMap origin={{ latitude: detail.farmer?.latitude ?? null, longitude: detail.farmer?.longitude ?? null, address: detail.farmer?.location || detail.batch?.location || 'Farm' }} destination={{ latitude: detail.retailer?.latitude ?? order.retailerLatitude ?? null, longitude: detail.retailer?.longitude ?? order.retailerLongitude ?? null, address: detail.retailer?.location || order.retailerLocation }} live={gps || (order.transporterLatitude != null && order.transporterLongitude != null ? { latitude: order.transporterLatitude, longitude: order.transporterLongitude, updatedAt: order.lastLocationAt } : null)} />}{order.status === 'ACCEPTED' && <button disabled={saving} onClick={() => void transition(order, 'START_PICKUP')} className="rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white">At farm · initiate farmer OTP</button>}{order.status === 'PICKUP_OTP_PENDING' && <div className="flex flex-wrap gap-2"><input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" maxLength={6} placeholder="Farmer pickup OTP" className="rounded-lg border px-3" /><button disabled={saving || otp.length !== 6 || pickupLocked || pickupExpired} onClick={() => void transition(order, 'VERIFY_PICKUP', { otp })} className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold text-white">Verify pickup</button>{(pickupExpired || pickupLocked) && <button disabled={saving} onClick={() => void transition(order, 'START_PICKUP')} className="rounded-lg border px-3 py-2 text-xs font-bold">OTP expired/locked · reissue</button>}</div>}{order.status === 'IN_TRANSIT' && <button disabled={saving} onClick={() => void transition(order, 'START_DELIVERY')} className="rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white">At retailer · initiate receipt OTP</button>}{order.status === 'DELIVERY_OTP_PENDING' && <div className="flex flex-wrap gap-2"><input value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" maxLength={6} placeholder="Retailer receipt OTP" className="rounded-lg border px-3" /><button disabled={saving || otp.length !== 6 || deliveryLocked || deliveryExpired} onClick={() => void transition(order, 'VERIFY_DELIVERY', { otp })} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><KeyRound size={14} className="mr-1 inline" />Confirm retailer receipt</button>{(deliveryExpired || deliveryLocked) && <button disabled={saving} onClick={() => void transition(order, 'START_DELIVERY')} className="rounded-lg border px-3 py-2 text-xs font-bold">OTP expired/locked · reissue</button>}</div>}</article>; })}</section>}
+    <section className="grid gap-4 sm:grid-cols-3">
+      {[{ label: 'Open retailer bids', value: offers.length }, { label: 'Batches with offers', value: new Set(offers.map((offer) => offer.batchId)).size }, { label: 'Top current bid', value: offers.length ? `₹${Math.max(...offers.map((offer) => offer.pricePerUnit)).toLocaleString('en-IN')} / unit` : '—' }].map((item) => <article key={item.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{item.label}</p><p className="mt-2 text-2xl font-extrabold text-slate-900">{item.value}</p></article>)}
+    </section>
+    <section className="grid gap-5 xl:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.15fr)]">
+      <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><h2 className="font-bold">Retailer bids · highest first</h2><p className="mt-1 text-xs text-slate-500">Each offer includes batch, retailer and FSSAI evidence.</p></div><button onClick={() => void refresh()} className="rounded-lg border p-2" aria-label="Refresh bids"><RefreshCw size={15} /></button></div>
+        {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading retailer offers…</p> : offers.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No retailer bids yet.</p> : <div className="max-h-[650px] divide-y overflow-y-auto">{offers.map((offer) => <button key={offer._id} onClick={() => setSelectedId(offer._id)} className={`w-full p-4 text-left hover:bg-emerald-50 ${selectedId === offer._id ? 'bg-emerald-50' : ''}`}><div className="flex items-start justify-between gap-3"><div><p className="font-bold text-slate-900">{offer.retailer?.name || 'Retailer'} <span className="font-normal text-slate-500">· {offer.retailerLocation}</span></p><p className="mt-1 text-xs text-slate-600">{offer.batch.product?.name || 'Crop'} · {offer.batch.batchCode} · {offer.batch.quantity} {offer.batch.unit}</p></div><strong className="whitespace-nowrap text-emerald-800">₹{offer.pricePerUnit.toLocaleString('en-IN')}/{offer.batch.unit}</strong></div><p className="mt-2 text-[11px] text-slate-500">Harvest {new Date(offer.batch.actualHarvestDate || offer.batch.harvestDate).toLocaleDateString('en-IN')} · Best for batch: ₹{highest.get(offer.batchId)?.toLocaleString('en-IN')}/{offer.batch.unit}</p></button>)}</div>}
+      </article>
+      <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {!selected && !accepted ? <div className="grid min-h-60 place-items-center text-center text-sm text-slate-500">Select a retailer offer to inspect details.</div> : <>
+          {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {(selected || accepted) && (() => { const offer = (selected || accepted)!; const cert = offer.batch.fssaiCertificate; const certStatus = cert?.verificationStatus; const isAccepted = offer.status === 'ACCEPTED'; const gross = offer.pricePerUnit * offer.batch.quantity; const commission = isAccepted ? offer.commissionAmount ?? gross * .04 : gross * .04; const payout = isAccepted ? offer.farmerPayoutAmount ?? gross * .96 : gross * .96; return <>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-mono text-xs text-slate-500">{offer.batch.batchCode}</p><h2 className="mt-1 text-xl font-extrabold">{offer.batch.product?.name || 'Crop'} delivery</h2><p className="mt-1 text-sm text-slate-600">Retailer: {offer.retailer?.name} · {offer.retailerLocation}</p></div><a href={mapsSearch(offer.retailerLocation)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold"><MapPin size={14} />Google Maps</a></div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">{[['Farmer', offer.batch.farmer?.name || '—'], ['Contact', offer.retailer?.phone || offer.batch.farmer?.phone || 'Not provided'], ['Crop quantity', `${offer.batch.quantity} ${offer.batch.unit}`], ['Harvest date', new Date(offer.batch.actualHarvestDate || offer.batch.harvestDate).toLocaleDateString('en-IN')], ['Offer price', `₹${offer.pricePerUnit.toLocaleString('en-IN')} per ${offer.batch.unit}`], ['Order value', `₹${gross.toLocaleString('en-IN')}`]].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] text-slate-500">{label}</p><p className="mt-1 text-sm font-bold">{value}</p></div>)}</div>
+            <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50 p-4"><div className="flex items-center gap-2 font-bold text-emerald-900"><ShieldCheck size={17} />FSSAI certificate verification</div>{cert ? <><p className="mt-2 text-sm font-semibold">{cert.certificateType} · {certStatus}</p><p className="mt-1 text-xs text-slate-600">Issuer: {cert.issuer} · Expiry: {new Date(cert.expiryDate).toLocaleDateString('en-IN')}</p>{cert.fileUrl && <a className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-800 underline" href={cert.fileUrl} target="_blank" rel="noreferrer">Open certificate <ExternalLink size={12} /></a>}{cert.blockchainTransactionHash && <p className="mt-2 break-all font-mono text-[10px] text-purple-800">Ledger transaction: {cert.blockchainTransactionHash}</p>}</> : <p className="mt-2 text-sm text-amber-800">No FSSAI certificate is attached to this batch.</p>}<p className="mt-2 text-xs text-slate-600">An admin review decision is the recorded validation status. File hashing/IPFS confirms document integrity, not FSSAI issuer authenticity.</p></div>
+            <div className="mt-5 rounded-xl bg-slate-900 p-4 text-white"><p className="text-xs text-slate-300">4% transporter commission · 96% farmer allocation</p><div className="mt-3 grid grid-cols-2 gap-3"><p className="text-sm">Commission <strong className="block text-lg">₹{commission.toLocaleString('en-IN')}</strong></p><p className="text-sm">Farmer share <strong className="block text-lg">₹{payout.toLocaleString('en-IN')}</strong></p></div><p className="mt-2 text-[11px] text-amber-200">Settlement is calculated and recorded; actual transfer needs a configured payment provider.</p></div>
+            {isAccepted ? <div className="mt-4 space-y-3"><p className="rounded-lg bg-emerald-100 p-3 text-sm font-bold text-emerald-900">Retailer accepted. Continue with delivery navigation.</p><label className="block text-xs font-semibold text-slate-600">Route start (optional)<div className="mt-1 flex gap-2"><input value={origin} onChange={(event) => setOrigin(event.target.value)} placeholder="Current location or address" className="min-w-0 flex-1 rounded-lg border px-3 py-2" /><button onClick={useLocation} className="rounded-lg border px-3" title="Use current location"><MapPin size={15} /></button></div></label><a href={mapsDirections(offer, origin || undefined)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white"><Navigation size={16} />Navigate with Google Maps</a></div> : <button disabled={saving} onClick={() => void acceptOffer(offer)} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white disabled:opacity-60"><Truck size={16} />{saving ? 'Accepting…' : 'Accept retailer and order'}</button>}
+          </>; })()}
+        </>}
+      </article>
+    </section>
+  </DashboardLayout>;
 }

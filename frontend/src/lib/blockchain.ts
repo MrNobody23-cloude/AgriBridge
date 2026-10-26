@@ -181,6 +181,24 @@ export async function registerBatchOnChain(
     }
 }
 
+/** Append a certificate/bid lifecycle event to the configured contract ledger. */
+export async function recordSupplyChainEventOnChain(input: {
+    batchCode: string; eventType: string; actorRole: string; location: string; metadata: string;
+}): Promise<{ transactionHash: string | null; reason: string | null }> {
+    if (!isBlockchainWritable()) return { transactionHash: null, reason: 'BLOCKCHAIN_NOT_CONFIGURED' };
+    try {
+        const provider = new ethers.JsonRpcProvider(POLYGON_RPC_URL);
+        const wallet = new ethers.Wallet(PRIVATE_KEY as string, provider);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS as string, AGRIBRIDGE_CONTRACT_ABI, wallet);
+        const tx = await contract.addSupplyChainEvent(input.batchCode, input.eventType, input.actorRole, input.location, input.metadata);
+        const receipt = await tx.wait();
+        return { transactionHash: receipt.hash, reason: null };
+    } catch (error: unknown) {
+        console.error('[blockchain] Event write failed:', error);
+        return { transactionHash: null, reason: 'BLOCKCHAIN_WRITE_FAILED' };
+    }
+}
+
 /**
  * Verify a batch hash against the chain.
  *

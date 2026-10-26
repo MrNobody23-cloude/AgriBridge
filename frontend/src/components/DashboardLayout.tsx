@@ -88,6 +88,10 @@ export default function DashboardLayout({
           const data = await res.json();
           if (data.success && data.data) {
             const sessionUser = data.data as SessionUser;
+            if (!ROLE_WORKFLOWS[sessionUser.role as keyof typeof ROLE_WORKFLOWS]) {
+              router.replace('/login');
+              return;
+            }
             const requiredRole = ROLE_BY_DASHBOARD[pathname];
             if (requiredRole && sessionUser.role !== requiredRole) {
               router.replace(dashboardForRole(sessionUser.role));

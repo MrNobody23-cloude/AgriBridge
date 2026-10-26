@@ -6,13 +6,16 @@ export const registerSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters').max(100),
     email: z.string().email('Invalid email address').toLowerCase(),
     password: z.string().min(8, 'Password must be at least 8 characters'),
-    role: z.enum(['FARMER', 'EXPORTER', 'TRANSPORTER', 'IMPORTER', 'RETAILER', 'CONSUMER']).default('FARMER'),
+    role: z.enum(['FARMER', 'TRANSPORTER', 'RETAILER', 'CONSUMER']).default('FARMER'),
     phone: z.string().optional(),
     // Farmer-specific fields
     farmName: z.string().optional(),
     location: z.string().optional(),
     state: z.string().optional(),
     district: z.string().optional(),
+    shopLocation: z.string().max(300).optional(),
+    latitude: z.number().min(6).max(38).optional(),
+    longitude: z.number().min(68).max(98).optional(),
 });
 
 export const loginSchema = z.object({
@@ -64,8 +67,8 @@ export const certificateUploadSchema = z.object({
 }).refine((d) => {
     const issued = new Date(`${d.issueDate}T00:00:00Z`);
     const expires = new Date(d.expiryDate);
-    return Number.isFinite(issued.getTime()) && Number.isFinite(expires.getTime()) && expires > issued && issued <= new Date();
-}, { message: 'Certificate dates must be valid, with expiry after issue and issue date not in the future', path: ['expiryDate'] }).refine(
+    return Number.isFinite(issued.getTime()) && Number.isFinite(expires.getTime()) && expires > issued && expires > new Date() && issued <= new Date();
+}, { message: 'Certificate dates must be valid, expiry must be in the future, and issue date cannot be in the future', path: ['expiryDate'] }).refine(
     (d) => d.fileUrl || d.fileBase64 || d.ipfsHash,
     { message: 'Provide fileUrl, fileBase64, or ipfsHash', path: ['fileUrl'] }
 );

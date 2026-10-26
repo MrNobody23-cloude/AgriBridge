@@ -58,6 +58,9 @@ export interface CreateUserInput {
     password: string;
     role: string;
     phone?: string | null;
+    shopLocation?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
 }
 
 export interface CreateUserWithProfileInput extends CreateUserInput {
@@ -66,6 +69,8 @@ export interface CreateUserWithProfileInput extends CreateUserInput {
         location: string;
         state: string;
         district: string;
+        latitude?: number | null;
+        longitude?: number | null;
     };
 }
 
@@ -97,6 +102,9 @@ export async function createUserWithProfile(
                         password: input.password,
                         role: input.role,
                         phone: input.phone ?? null,
+                        shopLocation: input.shopLocation ?? null,
+                        latitude: input.latitude ?? null,
+                        longitude: input.longitude ?? null,
                     },
                 ],
                 { session }

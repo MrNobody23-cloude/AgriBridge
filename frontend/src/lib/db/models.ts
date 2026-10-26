@@ -75,6 +75,8 @@ const FarmerProfileSchema = new S(
         location: { type: String, required: true },
         state: { type: String, required: true },
         district: { type: String, required: true },
+        latitude: { type: Number, default: null },
+        longitude: { type: Number, default: null },
     },
     { timestamps: true, collection: 'farmerprofiles' }
 );
@@ -88,9 +90,12 @@ const UserSchema = new S(
         name: { type: String, required: true },
         email: { type: String, required: true, unique: true },
         password: { type: String, required: true },
-        /// FARMER | EXPORTER | TRANSPORTER | IMPORTER | RETAILER | CONSUMER | REGULATOR | ADMIN
+        /// FARMER | TRANSPORTER | RETAILER | CONSUMER | ADMIN
         role: { type: String, required: true, default: 'FARMER' },
         phone: { type: String, default: null },
+        shopLocation: { type: String, default: null },
+        latitude: { type: Number, default: null },
+        longitude: { type: Number, default: null },
         isActive: { type: Boolean, required: true, default: true },
     },
     { timestamps: true, collection: 'users' }
@@ -593,6 +598,8 @@ export interface FarmerProfileDoc {
     location: string;
     state: string;
     district: string;
+    latitude?: number | null;
+    longitude?: number | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -605,6 +612,9 @@ export interface UserDoc {
     password: string;
     role: string;
     phone?: string | null;
+    shopLocation?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -862,6 +872,7 @@ export interface RagDocumentDoc {
     updatedAt: Date;
 }
 
+<<<<<<< Updated upstream
 // ─── LEAN DOCUMENT TYPES (continued) ────────────────────────────────────────
 
 export interface MarketListingDoc {
@@ -884,6 +895,66 @@ export interface MarketListingDoc {
     // strict: false — allow extra n8n fields through without type errors
     [key: string]: unknown;
 }
+=======
+const MarketplaceOfferSchema = new S(
+    {
+        _id: { type: String, required: true, default: () => crypto.randomUUID() },
+        batchId: { type: String, required: true },
+        retailerId: { type: String, required: true },
+        pricePerUnit: { type: Number, required: true, min: 0.01 },
+        currency: { type: String, required: true, default: 'INR' },
+        retailerLocation: { type: String, required: true },
+        latitude: { type: Number, default: null },
+        longitude: { type: Number, default: null },
+        status: { type: String, required: true, default: 'OPEN' },
+        acceptedBy: { type: String, default: null },
+        commissionAmount: { type: Number, default: null },
+        farmerPayoutAmount: { type: Number, default: null },
+        acceptedAt: { type: Date, default: null },
+        pickupOtpHash: { type: String, default: null },
+        pickupOtpCipher: { type: String, default: null },
+        pickupOtpExpiresAt: { type: Date, default: null },
+        pickupOtpAttempts: { type: Number, default: 0 },
+        pickupVerifiedAt: { type: Date, default: null },
+        transporterLatitude: { type: Number, default: null },
+        transporterLongitude: { type: Number, default: null },
+        lastLocationAt: { type: Date, default: null },
+        deliveryOtpHash: { type: String, default: null },
+        deliveryOtpCipher: { type: String, default: null },
+        deliveryOtpExpiresAt: { type: Date, default: null },
+        deliveryOtpAttempts: { type: Number, default: 0 },
+        deliveredAt: { type: Date, default: null },
+        inventoryCreated: { type: Boolean, default: false },
+    },
+    { timestamps: true, collection: 'marketplaceoffers' }
+);
+MarketplaceOfferSchema.index({ batchId: 1, status: 1, pricePerUnit: -1 });
+MarketplaceOfferSchema.index({ retailerId: 1, createdAt: -1 });
+MarketplaceOfferSchema.index({ batchId: 1 }, { unique: true, partialFilterExpression: { status: 'ACCEPTED' } });
+
+const RetailerInventorySchema = new S(
+    {
+        _id: { type: String, required: true, default: () => crypto.randomUUID() },
+        retailerId: { type: String, required: true },
+        batchId: { type: String, required: true },
+        productId: { type: String, required: true },
+        sourceOfferId: { type: String, required: true, unique: true },
+        quantityReceived: { type: Number, required: true },
+        quantityAvailable: { type: Number, required: true },
+        quantitySold: { type: Number, required: true, default: 0 },
+        unit: { type: String, required: true },
+        purchasePricePerUnit: { type: Number, required: true },
+        retailPricePerUnit: { type: Number, default: null },
+        status: { type: String, required: true, default: 'IN_STOCK' },
+        receivedAt: { type: Date, required: true, default: () => new Date() },
+        salesLog: { type: [{ soldAt: { type: Date, required: true }, quantity: { type: Number, required: true }, unitPrice: { type: Number, required: true }, amount: { type: Number, required: true }, actorId: { type: String, required: true } }], default: [] },
+    },
+    { timestamps: true, collection: 'retailerinventory' }
+);
+withoutInlineUniqueIndexes(RetailerInventorySchema, ['sourceOfferId']);
+RetailerInventorySchema.index({ sourceOfferId: 1 }, { unique: true });
+RetailerInventorySchema.index({ retailerId: 1, status: 1, receivedAt: -1 });
+>>>>>>> Stashed changes
 
 // ─── MODEL REGISTRY ───────────────────────────────────────────────────────────
 
@@ -914,6 +985,8 @@ function register(name: string, schema: Schema, model?: AnyModel): AnyModel {
 export const UserModel: AnyModel = register('User', UserSchema);
 export const BatchModel: AnyModel = register('Batch', BatchSchema);
 export const RagDocumentModel: AnyModel = register('RagDocument', RagDocumentSchema);
+export const MarketplaceOfferModel: AnyModel = register('MarketplaceOffer', MarketplaceOfferSchema);
+export const RetailerInventoryModel: AnyModel = register('RetailerInventory', RetailerInventorySchema);
 export const FarmerProfileModel: AnyModel = register('FarmerProfile', FarmerProfileSchema);
 export const ProductModel: AnyModel = register('Product', ProductSchema);
 export const SupplyChainEventModel: AnyModel = register('SupplyChainEvent', SupplyChainEventSchema);
