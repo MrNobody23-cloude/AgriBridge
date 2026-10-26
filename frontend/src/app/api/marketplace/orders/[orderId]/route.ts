@@ -11,6 +11,8 @@ import { successResponse, errorResponse } from '@/lib/response';
 
 type Coordinates = { latitude: number; longitude: number };
 const isCoordinate = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
+const isAssignedTransporter = (acceptedBy: unknown, userId: string) =>
+  acceptedBy != null && String(acceptedBy).trim() === userId.trim();
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   const auth = await requireAuth(req, ['FARMER', 'RETAILER', 'TRANSPORTER']);
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
     if (!offer) return errorResponse('Order not found.', 'NOT_FOUND', 404);
     const batch = await findBatchByIdOrCode(offer.batchId);
     if (!batch) return errorResponse('Crop batch not found.', 'NOT_FOUND', 404);
-    const allowed = auth.user.role === 'ADMIN' || (auth.user.role === 'TRANSPORTER' && offer.acceptedBy === auth.user.id) || (auth.user.role === 'RETAILER' && offer.retailerId === auth.user.id) || (auth.user.role === 'FARMER' && batch.farmerId === auth.user.id);
+    const allowed = auth.user.role === 'ADMIN' || (auth.user.role === 'TRANSPORTER' && isAssignedTransporter(offer.acceptedBy, auth.user.id)) || (auth.user.role === 'RETAILER' && offer.retailerId === auth.user.id) || (auth.user.role === 'FARMER' && batch.farmerId === auth.user.id);
     if (!allowed) return errorResponse('You cannot view this order.', 'FORBIDDEN', 403);
     const [farmer, farmerProfile, retailer, product] = await Promise.all([
       UserModel.findById(batch.farmerId).select({ password: 0 }).lean<Record<string, any>>(),
@@ -54,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ or
     if (!offer) return errorResponse('Order not found.', 'NOT_FOUND', 404);
     const batch = await findBatchByIdOrCode(offer.batchId);
     if (!batch) return errorResponse('Crop batch not found.', 'NOT_FOUND', 404);
-    const transporterOwns = auth.user.role === 'TRANSPORTER' && offer.acceptedBy === auth.user.id;
+    const transporterOwns = auth.user.role === 'TRANSPORTER' && isAssignedTransporter(offer.acceptedBy, auth.user.id);
     const lat = body.latitude;
     const lon = body.longitude;
     const coords: Coordinates | null = isCoordinate(lat, 6, 38) && isCoordinate(lon, 68, 98) ? { latitude: lat, longitude: lon } : null;

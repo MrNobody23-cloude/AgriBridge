@@ -1,6 +1,5 @@
 "use client";
 
-<<<<<<< Updated upstream
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -24,15 +23,7 @@ import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useTranslation } from "@/components/LanguageProvider";
 import type { ApiBatch, ApiBatchDetail, ApiEvent } from "@/lib/api-types";
-=======
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Camera, CheckCircle2, ChevronRight, CircleAlert, CloudUpload, Leaf, MapPin, Package, Pencil, Plus, RefreshCw, Search, Sprout, X, ExternalLink } from 'lucide-react';
-import Link from 'next/link';
-import DashboardLayout from '@/components/DashboardLayout';
-import { useTranslation } from '@/components/LanguageProvider';
-import type { ApiBatch, ApiBatchDetail, ApiEvent } from '@/lib/api-types';
-import FarmerFssaiUpload from '@/components/FarmerFssaiUpload';
->>>>>>> Stashed changes
+import FarmerFssaiUpload from "@/components/FarmerFssaiUpload";
 
 type UpdateStage =
   | "LAND_PREPARATION"
@@ -54,7 +45,6 @@ const stages: Array<{ value: UpdateStage; label: string }> = [
   { value: "HARVESTED", label: "Harvest completed" },
 ];
 
-<<<<<<< Updated upstream
 interface BatchForm {
   crop: string;
   variety: string;
@@ -101,12 +91,6 @@ const blankUpdate = (location = ""): UpdateForm => ({
   growthNotes: "",
   observedAt: new Date().toISOString().slice(0, 16),
 });
-=======
-interface BatchForm { crop: string; variety: string; quantity: string; unit: string; sowingDate: string; harvestDate: string; location: string; }
-const blankForm = (): BatchForm => ({ crop: '', variety: '', quantity: '', unit: 'kg', sowingDate: '', harvestDate: '', location: '' });
-interface UpdateForm { stage: UpdateStage; notes: string; location: string; weather: string; irrigation: string; fertilizer: string; pestDisease: string; soilMoisture: string; plantHeightCm: string; growthNotes: string; observedAt: string; }
-const blankUpdate = (location = ''): UpdateForm => ({ stage: 'VEGETATIVE_GROWTH', notes: '', location, weather: '', irrigation: '', fertilizer: '', pestDisease: '', soilMoisture: '', plantHeightCm: '', growthNotes: '', observedAt: new Date().toISOString().slice(0, 16) });
->>>>>>> Stashed changes
 
 function toInputDate(value?: string | Date | null) {
   return value ? new Date(value).toISOString().slice(0, 10) : "";
@@ -169,23 +153,39 @@ export default function FarmerWorkbench() {
     }
   }, [search]);
 
-<<<<<<< Updated upstream
   useEffect(() => {
     Promise.resolve().then(refresh);
   }, [refresh]);
-=======
-  useEffect(() => { Promise.resolve().then(refresh); }, [refresh]);
+
   const refreshPickups = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketplace/orders'); const json = await response.json(); if (!json.success) return;
-      const pending = (json.data || []).filter((order: { status: string }) => order.status === 'PICKUP_OTP_PENDING'); setPickupOrders(pending);
-      const details = await Promise.all(pending.map(async (order: { _id: string }) => { const result = await fetch(`/api/marketplace/orders/${order._id}`); return result.json(); }));
-      setPickupCodes(Object.fromEntries(details.filter((detail) => detail.success && detail.data.recipientOtp).map((detail) => [detail.data.order._id, detail.data.recipientOtp])));
+      const response = await fetch('/api/marketplace/orders');
+      const json = await response.json();
+      if (!json.success) return;
+      const pending = (json.data || []).filter((order: { status: string }) => order.status === 'PICKUP_OTP_PENDING');
+      setPickupOrders(pending);
+      const details = await Promise.all(
+        pending.map(async (order: { _id: string }) => {
+          const result = await fetch(`/api/marketplace/orders/${order._id}`);
+          return result.json();
+        })
+      );
+      setPickupCodes(
+        Object.fromEntries(
+          details
+            .filter((detail) => detail.success && detail.data.recipientOtp)
+            .map((detail) => [detail.data.order._id, detail.data.recipientOtp])
+        )
+      );
     } catch { /* delivery codes remain unavailable until the server responds */ }
   }, []);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial polling synchronizes pending pickup approvals.
-  useEffect(() => { void refreshPickups(); const timer = window.setInterval(() => void refreshPickups(), 8000); return () => window.clearInterval(timer); }, [refreshPickups]);
->>>>>>> Stashed changes
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    void refreshPickups();
+    const timer = window.setInterval(() => void refreshPickups(), 8000);
+    return () => window.clearInterval(timer);
+  }, [refreshPickups]);
 
   const openBatch = async (batchCode: string) => {
     setError("");
@@ -198,7 +198,6 @@ export default function FarmerWorkbench() {
         throw new Error(json.error?.message || "Could not load batch details.");
       setSelected(json.data as ApiBatchDetail);
       const detail = json.data as ApiBatchDetail;
-<<<<<<< Updated upstream
       setProgress(blankUpdate(detail.location || ""));
       setEditForm({
         crop: detail.product?.name || "",
@@ -217,11 +216,6 @@ export default function FarmerWorkbench() {
           : "Could not load batch details.",
       );
     }
-=======
-      setProgress(blankUpdate(detail.location || ''));
-      setEditForm({ crop: detail.product?.name || '', variety: detail.variety || '', quantity: String(detail.quantity || ''), unit: detail.unit || 'kg', sowingDate: toInputDate(detail.sowingDate), harvestDate: toInputDate(detail.harvestDate), location: detail.location || '' });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not load batch details.'); }
->>>>>>> Stashed changes
   };
 
   const saveNewBatch = async (event: React.FormEvent) => {
@@ -399,9 +393,28 @@ export default function FarmerWorkbench() {
     </label>
   );
 
-<<<<<<< Updated upstream
   return (
     <DashboardLayout title="Farmer Overview">
+      {pickupOrders.length > 0 && (
+        <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <div>
+            <h2 className="font-bold text-amber-950">Transporter pickup verification</h2>
+            <p className="text-xs text-amber-800">Share each code with the transporter only when they are physically collecting this batch.</p>
+          </div>
+          {pickupOrders.map((order) => (
+            <article key={order._id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3">
+              <div>
+                <p className="font-bold">{order.crop} · {order.batchCode}</p>
+                <p className="text-xs text-slate-500">Retailer: {order.retailerName}</p>
+              </div>
+              <p className="font-mono text-2xl font-extrabold tracking-[0.2em] text-emerald-800">
+                {pickupCodes[order._id] || '------'}
+              </p>
+            </article>
+          ))}
+        </section>
+      )}
+
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#143d2b] via-[#1f6542] to-[#2b8152] p-6 text-white shadow-lg sm:p-8">
         <div className="absolute -right-8 -top-12 h-56 w-56 rounded-full border-[28px] border-white/5" />
         <div className="absolute bottom-[-80px] right-[18%] h-52 w-52 rounded-full bg-lime-300/10 blur-2xl" />
@@ -430,29 +443,6 @@ export default function FarmerWorkbench() {
             <Plus size={17} />
             {t("Register crop batch")}
           </button>
-=======
-  return <DashboardLayout title="Farmer Overview">
-    {pickupOrders.length > 0 && <section className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4"><div><h2 className="font-bold text-amber-950">Transporter pickup verification</h2><p className="text-xs text-amber-800">Share each code with the transporter only when they are physically collecting this batch.</p></div>{pickupOrders.map((order) => <article key={order._id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3"><div><p className="font-bold">{order.crop} · {order.batchCode}</p><p className="text-xs text-slate-500">Retailer: {order.retailerName}</p></div><p className="font-mono text-2xl font-extrabold tracking-[0.2em] text-emerald-800">{pickupCodes[order._id] || '------'}</p></article>)}</section>}
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#143d2b] via-[#1f6542] to-[#2b8152] p-6 text-white shadow-lg sm:p-8">
-      <div className="absolute -right-8 -top-12 h-56 w-56 rounded-full border-[28px] border-white/5" /><div className="absolute bottom-[-80px] right-[18%] h-52 w-52 rounded-full bg-lime-300/10 blur-2xl" />
-      <div className="relative flex flex-wrap items-end justify-between gap-5"><div className="max-w-2xl"><div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-lime-100"><Sprout size={14} />{t('Farm to harvest, one clear record.')}</div><h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{t('Your farm, documented at every stage.')}</h1><p className="mt-2 text-sm leading-6 text-white/75">{t('Create a crop batch, record field activity over time, attach real photos and keep the complete harvest history together.')}</p></div><button onClick={() => { setForm(blankForm()); setShowCreate(true); }} className="inline-flex items-center gap-2 rounded-xl bg-lime-300 px-4 py-3 text-sm font-extrabold text-[#173d2b] shadow-sm hover:bg-lime-200"><Plus size={17} />{t('Register crop batch')}</button></div>
-    </section>
-
-    {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><CircleAlert size={17} className="mt-0.5 shrink-0" />{error}<button onClick={() => setError('')} className="ml-auto"><X size={16} /></button></div>}
-    {notice && <div role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice('')} className="ml-auto"><X size={16} /></button></div>}
-
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[{ label: 'Registered batches', value: batches.length, icon: Package }, { label: 'Harvested batches', value: totals.stages, icon: CheckCircle2 }, { label: 'Portfolio quantity', value: `${totals.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${batches[0]?.unit || 'kg'}`, icon: Leaf }, { label: 'Flagged for review', value: totals.flagged, icon: CircleAlert }].map(({ label, value, icon: Icon }) => <div key={label} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t(label)}</span><Icon size={17} className="text-emerald-700" /></div><p className="mt-3 text-2xl font-extrabold text-slate-900">{value}</p></div>)}
-    </section>
-
-    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.88fr)]">
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 sm:p-5"><div><h2 className="font-bold text-slate-900">{t('My crop portfolio')}</h2><p className="mt-1 text-xs text-slate-500">{t('Select a batch to see its records and add the next update.')}</p></div><div className="flex gap-2"><label className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Search crop, batch or location')} className="w-48 rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-500" /></label><button onClick={() => void refresh()} aria-label={t('Refresh batches')} className="rounded-xl border border-slate-200 px-3 text-slate-600 hover:bg-slate-50"><RefreshCw size={15} /></button></div></div>
-        <div className="max-h-[650px] divide-y divide-slate-100 overflow-y-auto">
-          {loading ? <div className="p-10 text-center text-sm text-slate-500">{t('Loading your batches…')}</div> : visibleBatches.length === 0 ? <div className="p-10 text-center"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700"><Leaf size={22} /></div><p className="font-semibold text-slate-800">{t('No crop batches yet')}</p><p className="mt-1 text-xs text-slate-500">{t('Register your first crop to start its farm record.')}</p></div> : visibleBatches.map((batch) => <button key={batch._id} onClick={() => void openBatch(batch.batchCode)} className={`flex w-full items-center gap-3 p-4 text-left transition hover:bg-emerald-50/60 ${selected?._id === batch._id ? 'bg-emerald-50' : ''}`}>
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-800"><Leaf size={19} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-sm font-bold text-slate-900">{batch.product?.name || t('Crop batch')}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{(batch.harvestStage || 'REGISTERED').replaceAll('_', ' ')}</span></div><p className="mt-1 truncate font-mono text-[11px] text-slate-500">{batch.batchCode} · {batch.location}</p><p className="mt-1 text-[11px] text-slate-500">{Number(batch.quantity).toLocaleString()} {batch.unit || 'kg'} · {t('Expected harvest')}: {batch.harvestDate ? new Date(batch.harvestDate).toLocaleDateString(language) : '—'}</p></div><ChevronRight size={17} className="shrink-0 text-slate-400" />
-          </button>)}
->>>>>>> Stashed changes
         </div>
       </section>
 
@@ -574,11 +564,10 @@ export default function FarmerWorkbench() {
             ) : (
               visibleBatches.map((batch) => (
                 <button
-                  key={batch._id  || batch.batchCode}
+                  key={batch._id || batch.batchCode}
                   onClick={() => void openBatch(batch.batchCode)}
-                  className={`flex w-full items-center gap-3 p-4 text-left transition hover:bg-emerald-50/60 ${
-                    selected?._id === batch._id ? "bg-emerald-50" : ""
-                  }`}
+                  className={`flex w-full items-center gap-3 p-4 text-left transition hover:bg-emerald-50/60 ${selected?._id === batch._id ? "bg-emerald-50" : ""
+                    }`}
                 >
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-800">
                     <Leaf size={19} />
@@ -603,8 +592,8 @@ export default function FarmerWorkbench() {
                       {batch.unit || "kg"} · {t("Expected harvest")}:{" "}
                       {batch.harvestDate
                         ? new Date(batch.harvestDate).toLocaleDateString(
-                            language,
-                          )
+                          language,
+                        )
                         : "—"}
                     </p>
                   </div>
@@ -661,33 +650,32 @@ export default function FarmerWorkbench() {
                   {[
                     {
                       label: "Quantity",
-                      value: `${Number(selected.quantity).toLocaleString()} ${
-                        selected.unit || "kg"
-                      }`,
+                      value: `${Number(selected.quantity).toLocaleString()} ${selected.unit || "kg"
+                        }`,
                     },
                     { label: "Farm location", value: selected.location || "—" },
                     {
                       label: "Sowing date",
                       value: selected.sowingDate
                         ? new Date(selected.sowingDate).toLocaleDateString(
-                            language,
-                          )
+                          language,
+                        )
                         : "—",
                     },
                     {
                       label: "Expected harvest",
                       value: selected.harvestDate
                         ? new Date(selected.harvestDate).toLocaleDateString(
-                            language,
-                          )
+                          language,
+                        )
                         : "—",
                     },
                     {
                       label: "Actual harvest",
                       value: selected.actualHarvestDate
                         ? new Date(
-                            selected.actualHarvestDate,
-                          ).toLocaleDateString(language)
+                          selected.actualHarvestDate,
+                        ).toLocaleDateString(language)
                         : t("Not harvested"),
                     },
                     {
@@ -928,8 +916,8 @@ export default function FarmerWorkbench() {
                           <p className="text-[10px] font-semibold text-slate-400">
                             {event.timestamp
                               ? new Date(event.timestamp).toLocaleString(
-                                  language,
-                                )
+                                language,
+                              )
                               : ""}
                           </p>
                           <p className="mt-0.5 text-xs font-bold text-slate-800">
@@ -1032,6 +1020,13 @@ export default function FarmerWorkbench() {
                       ))}
                     </ul>
                   )}
+                  <FarmerFssaiUpload
+                    batchId={selected.batchCode}
+                    onUploaded={() => {
+                      void refresh();
+                      void openBatch(selected.batchCode);
+                    }}
+                  />
                 </article>
                 <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <h3 className="font-bold text-slate-900">
@@ -1203,7 +1198,6 @@ export default function FarmerWorkbench() {
         </div>
       )}
 
-<<<<<<< Updated upstream
       {showEdit && selected && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm">
           <div className="my-6 w-full max-w-xl rounded-2xl bg-white shadow-2xl">
@@ -1305,31 +1299,4 @@ export default function FarmerWorkbench() {
       )}
     </DashboardLayout>
   );
-=======
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><div><h3 className="font-bold text-slate-900">{t('Batch timeline')}</h3><p className="mt-1 text-xs text-slate-500">{events.length} {t('recorded updates')}</p></div><CalendarDays size={17} className="text-emerald-700" /></div>
-            {events.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-xs text-slate-500">{t('No timeline updates recorded yet.')}</p> : <ol className="max-h-96 space-y-3 overflow-y-auto">{[...events].reverse().map((event) => { const meta = parseMetadata(event); const measurements = (meta.measurements || {}) as Record<string, unknown>; return <li key={event._id} className="relative border-l-2 border-emerald-200 pb-1 pl-4"><span className="absolute -left-[5px] top-1 h-2 w-2 rounded-full bg-emerald-700" /><p className="text-[10px] font-semibold text-slate-400">{event.timestamp ? new Date(event.timestamp).toLocaleString(language) : ''}</p><p className="mt-0.5 text-xs font-bold text-slate-800">{String(meta.stage || event.eventType).replaceAll('_', ' ')}</p>{event.location && <p className="mt-0.5 text-[11px] text-slate-500">{event.location}</p>}{typeof meta.notes === 'string' && meta.notes && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{meta.notes}</p>}{Object.keys(measurements).length > 0 && <p className="mt-1 text-[11px] text-slate-500">{Object.entries(measurements).map(([key, value]) => `${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}: ${value}`).join(' · ')}</p>}{typeof meta.imageUrl === 'string' && <a href={meta.imageUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700"><Camera size={13} />{t('View field photo')}</a>}</li>; })}</ol>}
-          </section>
-
-          <section className="grid gap-3 sm:grid-cols-2">
-            <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="font-bold text-slate-900">{t('Certificates')} <span className="ml-1 text-xs font-medium text-slate-400">{certificates.length}</span></h3>{certificates.length === 0 ? <p className="mt-2 text-xs text-slate-500">{t('No certificates attached.')}</p> : <ul className="mt-3 space-y-2">{certificates.map((certificate, index) => <li key={certificate._id || index} className="flex items-start justify-between gap-2 rounded-lg bg-slate-50 p-2.5"><div><p className="text-xs font-bold text-slate-800">{certificate.certificateType || t('Certificate')}</p><p className="mt-0.5 text-[10px] text-slate-500">{certificate.issuer || t('Issuer not recorded')} · {certificate.verificationStatus || 'PENDING'}</p>{certificate.expiryDate && <p className="text-[10px] text-slate-500">{t('Expires')}: {new Date(certificate.expiryDate).toLocaleDateString(language)}</p>}</div>{certificate.fileUrl && <a href={certificate.fileUrl} target="_blank" rel="noreferrer" aria-label={t('Open certificate')}><ExternalLink size={14} className="text-emerald-700" /></a>}</li>)}</ul>}<FarmerFssaiUpload batchId={selected.batchCode} onUploaded={() => { void refresh(); void openBatch(selected.batchCode); }} /></article>
-            <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><h3 className="font-bold text-slate-900">{t('Shipments and alerts')}</h3>{shipments.length === 0 && fraudAlerts.length === 0 ? <p className="mt-2 text-xs text-slate-500">{t('No shipment or fraud alert is linked to this batch.')}</p> : <ul className="mt-3 space-y-2">{shipments.map((shipment, index) => <li key={shipment._id || index} className="rounded-lg bg-slate-50 p-2.5 text-xs"><p className="font-bold text-slate-800">{shipment.shipmentCode || t('Shipment')} · {shipment.status}</p><p className="mt-0.5 text-[10px] text-slate-500">{shipment.destinationCountry || '—'} · {shipment.quantity ?? '—'} {selected.unit || 'kg'}</p></li>)}{fraudAlerts.map((alert, index) => <li key={alert._id || index} className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900"><strong>{alert.severity} · {alert.status}</strong><p className="mt-0.5">{alert.description}</p></li>)}</ul>}</article>
-          </section>
-
-          <details className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4 text-xs text-slate-700"><summary className="cursor-pointer font-bold text-sky-950">{t('How is the trust score calculated?')}</summary><p className="mt-3 leading-5">{t('The score uses up to six evidence factors: blockchain verification (20 points), certificate status (20), cold-chain readings (20), regulatory compliance checks (10), recorded ML quality (10), and chain-of-custody event coverage (30). Factors without evidence are excluded from the denominator, so the score is normalized across only the available evidence. Missing evidence is listed separately; it does not earn points.')}</p><p className="mt-2 leading-5">{t('A high score based on a small amount of evidence is a partial assessment, not proof that the whole batch is safe or legally compliant.')}</p><Link href="/trust-score" className="mt-2 inline-block font-bold text-sky-800 underline">{t('Open score details')}</Link></details>
-        </>}
-      </div>
-    </section>
-
-    {showCreate && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"><div className="my-6 w-full max-w-2xl rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-slate-100 p-5"><div><h2 className="text-lg font-extrabold text-slate-900">{t('Register a crop batch')}</h2><p className="mt-1 text-xs text-slate-500">{t('Start the traceability record at planting. Enter your expected harvest date.')}</p></div><button onClick={() => setShowCreate(false)} aria-label={t('Close')}><X size={19} /></button></div><form onSubmit={saveNewBatch} className="grid gap-4 p-5 sm:grid-cols-2">
-      {field('Crop type', form.crop, (value) => setBatchField('crop', value), { required: true, placeholder: t('Type any crop name') })}{field('Variety / cultivar', form.variety, (value) => setBatchField('variety', value))}{field('Quantity', form.quantity, (value) => setBatchField('quantity', value), { type: 'number', required: true, step: '0.01' })}<label className="block space-y-1.5"><span className="text-xs font-semibold text-slate-600">{t('Unit')}</span><select value={form.unit} onChange={(event) => setBatchField('unit', event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"><option>kg</option><option>tonne</option><option>quintal</option><option>crate</option><option>piece</option></select></label>
-      {field('Sowing / planting date', form.sowingDate, (value) => setBatchField('sowingDate', value), { type: 'date' })}{field('Expected harvest date', form.harvestDate, (value) => setBatchField('harvestDate', value), { type: 'date', required: true })}<div className="sm:col-span-2">{field('Farm location', form.location, (value) => setBatchField('location', value), { required: true })}</div>
-      <p className="sm:col-span-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{t('Crop, quantity, expected harvest date and location form the initial batch fingerprint. After that fingerprint is written to a configured blockchain, those original fields cannot be edited.')}</p><button disabled={saving} className="sm:col-span-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{saving ? t('Registering…') : t('Register batch and open its portfolio')}</button>
-    </form></div></div>}
-
-    {showEdit && selected && <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"><div className="my-6 w-full max-w-xl rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-slate-100 p-5"><div><h2 className="font-extrabold text-slate-900">{t('Edit batch information')}</h2><p className="mt-1 text-xs text-slate-500">{t('Edits are validated and recorded as attributable batch events.')}</p></div><button onClick={() => setShowEdit(false)} aria-label={t('Close')}><X size={19} /></button></div><form onSubmit={saveBatchEdits} className="grid gap-4 p-5 sm:grid-cols-2">
-      {field('Crop type', editForm.crop, (value) => setEditField('crop', value), { required: true, disabled: !canEditAnchored })}{field('Variety / cultivar', editForm.variety, (value) => setEditField('variety', value), { disabled: !canEditAnchored })}{field('Quantity', editForm.quantity, (value) => setEditField('quantity', value), { type: 'number', required: true, step: '0.01', disabled: !canEditAnchored })}{field('Unit', editForm.unit, (value) => setEditField('unit', value), { required: true, disabled: !canEditAnchored })}{field('Sowing date', editForm.sowingDate, (value) => setEditField('sowingDate', value), { type: 'date', disabled: !canEditAnchored })}{field('Expected harvest', editForm.harvestDate, (value) => setEditField('harvestDate', value), { type: 'date', required: true, disabled: !canEditAnchored })}<div className="sm:col-span-2">{field('Farm location', editForm.location, (value) => setEditField('location', value), { required: true, disabled: !canEditAnchored })}</div>
-      {!canEditAnchored && <p className="sm:col-span-2 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">{t('The original fingerprint is anchored on-chain, so registration details are locked. Add corrections as a dated field update.')}</p>}<button disabled={saving} className="sm:col-span-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">{saving ? t('Saving…') : t('Save changes')}</button>
-    </form></div></div>}
-  </DashboardLayout>;
->>>>>>> Stashed changes
 }

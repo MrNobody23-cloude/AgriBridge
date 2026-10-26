@@ -66,16 +66,16 @@ export default function TopBar({ title: propTitle, user }: { title?: string; use
   };
 
   return (
-    <header className="dashboard-topbar h-16 glass-header px-6 flex items-center justify-between sticky top-0 z-30 transition-all rounded-b-2xl mx-6 mt-2">
+    <header className="dashboard-topbar h-16 glass-header flex items-center justify-between gap-3 sticky top-0 z-30 transition-all">
       {/* Breadcrumb & Title */}
-      <div className="flex items-center gap-2 text-xs text-gray-600">
+      <div className="flex min-w-0 items-center gap-2 text-xs text-gray-600">
         <span className="font-medium hidden sm:inline">AgriBridge AI</span>
         <span className="hidden sm:inline">/</span>
-        <span className="font-bold text-[#1a1a1a] text-sm">{t(title)}</span>
+        <span className="truncate font-bold text-[#1a1a1a] text-sm">{t(title)}</span>
       </div>
 
       {/* Right Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <LanguageSwitcher />
         {/* Search Bar */}
         <div className="relative hidden md:block">

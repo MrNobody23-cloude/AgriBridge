@@ -1,13 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, MapPin, RefreshCw, Search, Sprout, PackageCheck } from 'lucide-react';
+import Link from 'next/link';
+import { ExternalLink, MapPin, RefreshCw, Search, Sprout, Boxes, ArrowRight } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import OrderRouteMap from '@/components/OrderRouteMap';
 
 type DeliveryOrder = { _id: string; status: string; batchCode: string; crop: string; quantity: number; unit: string; farmLocation: string; retailerLocation: string; retailerLatitude: number | null; retailerLongitude: number | null; transporterLatitude: number | null; transporterLongitude: number | null; lastLocationAt: string | null };
-type InventoryItem = { _id: string; crop: string; batchCode: string; quantityAvailable: number; quantitySold: number; quantityReceived: number; unit: string; purchasePricePerUnit: number; retailPricePerUnit: number | null; receivedAt: string; salesLog?: Array<{ soldAt: string; quantity: number; unitPrice: number; amount: number }> };
-
 type MarketBatch = {
   _id: string; batchCode: string; quantity: number; unit: string; harvestDate: string; actualHarvestDate?: string;
   location: string; status: string; harvestStage?: string; product?: { name: string } | null;
@@ -31,8 +30,6 @@ export default function RetailerDashboard() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [saleQuantities, setSaleQuantities] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     setLoading(true); setError('');
@@ -42,22 +39,12 @@ export default function RetailerDashboard() {
   }, [search]);
   useEffect(() => { Promise.resolve().then(refresh); }, [refresh]);
   const refreshOperations = useCallback(async () => {
-    const [ordersResponse, stockResponse] = await Promise.all([fetch('/api/marketplace/orders'), fetch('/api/retailer/inventory')]);
-    const [ordersJson, stockJson] = await Promise.all([ordersResponse.json(), stockResponse.json()]);
-    if (ordersJson.success) setOrders(ordersJson.data || []); if (stockJson.success) setInventory(stockJson.data || []);
+    const ordersResponse = await fetch('/api/marketplace/orders', { cache: 'no-store' });
+    const ordersJson = await ordersResponse.json();
+    if (ordersJson.success) setOrders(ordersJson.data || []);
   }, []);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch and polling synchronize live order/stock data.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch and polling synchronize live delivery data.
   useEffect(() => { void refreshOperations(); const timer = window.setInterval(() => void refreshOperations(), 8000); return () => window.clearInterval(timer); }, [refreshOperations]);
-  async function inventoryAction(item: InventoryItem, action: 'PRICE' | 'SELL') {
-    setSaving(item._id); setError(''); setMessage('');
-    try {
-      const body = action === 'PRICE' ? { inventoryId: item._id, action, retailPricePerUnit: Number(priceByBatch[item._id]) } : { inventoryId: item._id, action, quantity: Number(saleQuantities[item._id]) };
-      const response = await fetch('/api/retailer/inventory', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const json = await response.json();
-      if (!json.success) throw new Error(json.error?.message || 'Inventory update failed.');
-      setMessage(action === 'PRICE' ? 'Retail price saved.' : `Sale recorded · ${json.data.saleValue ? `₹${json.data.saleValue.toLocaleString('en-IN')}` : 'stock updated'}`); await refreshOperations();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Inventory update failed.'); } finally { setSaving(null); }
-  }
-
   const nearby = useMemo(() => {
     const needle = farmLocationFilter.trim().toLowerCase();
     if (!needle) return batches;
@@ -79,8 +66,11 @@ export default function RetailerDashboard() {
   }
 
   return <DashboardLayout title="Retailer Crop Marketplace">
+    <Link href="/retailer/inventory" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition hover:border-emerald-400 hover:shadow-md sm:p-6">
+      <span className="flex min-w-0 items-center gap-4"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Boxes size={22} /></span><span><strong className="block text-base font-extrabold text-slate-900">Inventory management</strong><span className="mt-1 block text-sm text-slate-600">Manage stock, update retail prices and record sales.</span></span></span>
+      <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-800 px-4 py-2.5 text-sm font-bold text-white">Open inventory <ArrowRight size={16} /></span>
+    </Link>
     <section className="space-y-3"><div><h2 className="text-lg font-extrabold">Deliveries & live tracking</h2><p className="text-xs text-slate-500">This page refreshes transporter location every 8 seconds while an order is moving.</p></div>{orders.length === 0 ? <p className="rounded-xl bg-white p-5 text-sm text-slate-500">Accepted orders will appear here.</p> : orders.map((order) => <RetailerDelivery key={order._id} order={order} />)}</section>
-    <section className="space-y-3"><div><h2 className="text-lg font-extrabold">Retail inventory</h2><p className="text-xs text-slate-500">Verified order receipt adds the batch to stock. Set your selling price and record sales to keep available quantity accurate.</p></div>{inventory.length === 0 ? <p className="rounded-xl bg-white p-5 text-sm text-slate-500">Received goods will appear here after OTP confirmation.</p> : <div className="grid gap-3 lg:grid-cols-2">{inventory.map((item) => <article key={item._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between"><div><h3 className="font-bold">{item.crop} · {item.batchCode}</h3><p className="text-xs text-slate-500">Received {new Date(item.receivedAt).toLocaleDateString('en-IN')} · Purchase ₹{item.purchasePricePerUnit}/{item.unit}</p></div><span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">{item.quantityAvailable} {item.unit} available</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><p className="rounded-lg bg-slate-50 p-2">Received: {item.quantityReceived} {item.unit}</p><p className="rounded-lg bg-slate-50 p-2">Sold: {item.quantitySold} {item.unit}</p></div><div className="mt-3 flex flex-wrap gap-2"><input aria-label="Retail price per unit" type="number" min="0.01" step="0.01" value={priceByBatch[item._id] ?? item.retailPricePerUnit ?? ''} onChange={(e) => setPriceByBatch((p) => ({ ...p, [item._id]: e.target.value }))} placeholder="Retail price / unit" className="w-36 rounded-lg border px-3 py-2 text-sm" /><button disabled={saving === item._id} onClick={() => void inventoryAction(item, 'PRICE')} className="rounded-lg border px-3 py-2 text-xs font-bold">Save price</button><input aria-label="Quantity sold" type="number" min="0.01" step="0.01" max={item.quantityAvailable} value={saleQuantities[item._id] || ''} onChange={(e) => setSaleQuantities((p) => ({ ...p, [item._id]: e.target.value }))} placeholder="Qty sold" className="w-28 rounded-lg border px-3 py-2 text-sm" /><button disabled={saving === item._id || !item.retailPricePerUnit} onClick={() => void inventoryAction(item, 'SELL')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white"><PackageCheck size={14} />Record sale</button></div>{item.salesLog?.length ? <details className="mt-3 text-xs"><summary className="cursor-pointer font-bold text-slate-600">Sales ledger · {item.salesLog.length} recorded</summary><ul className="mt-2 space-y-1">{item.salesLog.slice().reverse().slice(0, 10).map((sale, index) => <li key={`${sale.soldAt}-${index}`} className="flex justify-between rounded bg-slate-50 p-2"><span>{new Date(sale.soldAt).toLocaleString('en-IN')} · {sale.quantity} {item.unit} × ₹{sale.unitPrice}</span><strong>₹{sale.amount.toLocaleString('en-IN')}</strong></li>)}</ul></details> : null}</article>)}</div>}</section>
     <section className="rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-lime-50 p-5 sm:p-7"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-800">Direct farm sourcing · India</p><h1 className="mt-2 text-2xl font-extrabold text-slate-900">Find a crop. Make an offer.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Browse farmer batches, compare expected harvest dates and certificate status, then submit your INR bid. Transporters see open offers ranked by price.</p></div><div className="rounded-2xl bg-white/80 p-4"><p className="text-xs text-slate-500">Available batches</p><p className="mt-1 text-2xl font-extrabold">{nearby.length}</p></div></div></section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto]"><label className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find crop or batch code" className="w-full rounded-xl border border-slate-200 py-3 pl-9 pr-3 text-sm" /></label><input value={farmLocationFilter} onChange={(event) => setFarmLocationFilter(event.target.value)} placeholder="Filter nearby farms by district / state" className="rounded-xl border border-slate-200 px-3 py-3 text-sm" /><div className="flex gap-2"><input value={retailerLocation} onChange={(event) => { setRetailerCoordinates(null); setRetailerLocation(event.target.value); }} placeholder="Your store / dispatch location" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-3 text-sm" /><button type="button" title="Use current location for retailer bids" onClick={() => navigator.geolocation?.getCurrentPosition((position) => { setRetailerCoordinates({ latitude: position.coords.latitude, longitude: position.coords.longitude }); setRetailerLocation(`${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`); }, () => setError('Location permission was not granted.'))} className="rounded-xl border px-3"><MapPin size={16} /></button></div><button onClick={() => void refresh()} className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"><RefreshCw size={15} />Refresh</button></div><p className="mt-2 text-[11px] text-slate-500">Nearby matching uses farmer district, state and location text. Your store coordinates, when shared, are included in bids for accurate Google Maps navigation.</p>{error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}{message && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{message}</p>}</section>

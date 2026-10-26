@@ -31,6 +31,7 @@ body {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 16px;
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 /* ─── Scrollbar ─────────────────────────────────── */
@@ -87,35 +88,12 @@ body {
     #f5f6f0;
 }
 
-.dashboard-sidebar {
-  background: #183d2e;
-  color: #eff5e9;
-  border: 0;
-  box-shadow: 12px 0 36px -30px rgba(13, 43, 29, 0.5);
-}
-
-.dashboard-sidebar h1,
-.dashboard-sidebar [class~="text-[#1a1a1a]"] { color: #f7f8f1; }
-.dashboard-sidebar .text-gray-400 { color: #8ea395; }
-.dashboard-sidebar .text-gray-500 { color: #a7b8ab; }
-.dashboard-sidebar .text-gray-600 { color: #c4d1c7; }
-.dashboard-sidebar [class~="border-white/20"] { border-color: rgba(255, 255, 255, 0.11); }
-.dashboard-sidebar [class~="bg-white/20"] { background: rgba(255, 255, 255, 0.07); }
-.dashboard-sidebar .bg-agro-green { background: #d8e6c7; color: #183d2e; }
-.dashboard-sidebar .text-agro-green { color: #d5e5c6; }
-
-.dashboard-nav-link { color: #c4d1c7; border: 1px solid transparent; }
-.dashboard-nav-link:hover { color: #fff; background: rgba(255,255,255,.07); }
-.dashboard-nav-link[class*="bg-white/50"] {
-  color: #1d4635;
-  background: #edf4e7;
-  border-color: rgba(255,255,255,.28);
-  box-shadow: 0 5px 16px rgba(9, 29, 19, .16);
-}
-
-.dashboard-content { min-height: 100vh; }
+.dashboard-content { min-height: 100vh; width: 100%; min-width: 0; }
 .dashboard-main { max-width: 1680px; margin: 0 auto; padding: 28px clamp(18px, 3vw, 44px) 48px; }
-.dashboard-topbar { min-height: 76px; margin: 18px clamp(18px, 3vw, 44px) 0; padding: 0 24px; border: 1px solid rgba(32,67,47,.08); border-radius: 18px; }
+.dashboard-topbar { width: auto; min-width: 0; min-height: 68px; margin: 12px clamp(12px, 2.5vw, 36px) 0; padding: 0 clamp(12px, 2vw, 24px); border: 1px solid rgba(32,67,47,.08); border-radius: 18px; }
+.dashboard-main > *, .dashboard-main section, .dashboard-main article { min-width: 0; }
+.dashboard-main table { width: 100%; }
+.dashboard-main pre, .dashboard-main code { overflow-wrap: anywhere; }
 
 /* Consistent dashboard surfaces and form controls, independent of page role. */
 .dashboard-main [class~="bg-white"] {
@@ -143,21 +121,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled), a { transition-duration: .18s; }
 
 @media (max-width: 760px) {
-  .dashboard-sidebar { width: 68px !important; padding-left: 5px; padding-right: 5px; }
-  .dashboard-sidebar > div > div:first-child { justify-content: center; padding-left: 5px; padding-right: 5px; }
-  .dashboard-sidebar > div > div:first-child > a > div:last-child,
-  .dashboard-sidebar > div > div:first-child > button,
-  .dashboard-sidebar nav > div > p,
-  .dashboard-sidebar nav a > span,
-  .dashboard-sidebar > div > div:last-child > div > div:last-child,
-  .dashboard-sidebar > div > div:last-child > button > span { display: none; }
-  .dashboard-sidebar nav { padding-left: 5px; padding-right: 5px; }
-  .dashboard-sidebar nav a { justify-content: center; padding: 11px 0; }
-  .dashboard-sidebar > div > div:last-child > div { justify-content: center; padding: 5px 0; }
-  .dashboard-sidebar > div > div:last-child > button { justify-content: center; padding: 11px 0; }
-  .dashboard-content { margin-left: 68px !important; }
-  .dashboard-topbar { margin: 10px 10px 0; min-height: 64px; padding: 0 14px; border-radius: 14px; }
-  .dashboard-main { padding: 18px 12px 32px; }
+  .dashboard-topbar { min-height: 60px; margin-top: 8px; border-radius: 14px; }
+  .dashboard-main { padding: 18px clamp(12px, 3vw, 24px) 32px; }
+  .dashboard-main table { display: block; overflow-x: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -364,9 +330,4 @@ button:not(:disabled), a { transition-duration: .18s; }
 
 .input-glass::placeholder {
   color: #9ca3af;
-}
-
-/* ─── Sidebar nav scrollbar ─────────────────────── */
-.sidebar-nav::-webkit-scrollbar {
-  width: 3px;
 }

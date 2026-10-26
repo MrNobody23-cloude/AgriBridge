@@ -872,7 +872,6 @@ export interface RagDocumentDoc {
     updatedAt: Date;
 }
 
-<<<<<<< Updated upstream
 // ─── LEAN DOCUMENT TYPES (continued) ────────────────────────────────────────
 
 export interface MarketListingDoc {
@@ -895,7 +894,7 @@ export interface MarketListingDoc {
     // strict: false — allow extra n8n fields through without type errors
     [key: string]: unknown;
 }
-=======
+
 const MarketplaceOfferSchema = new S(
     {
         _id: { type: String, required: true, default: () => crypto.randomUUID() },
@@ -954,7 +953,6 @@ const RetailerInventorySchema = new S(
 withoutInlineUniqueIndexes(RetailerInventorySchema, ['sourceOfferId']);
 RetailerInventorySchema.index({ sourceOfferId: 1 }, { unique: true });
 RetailerInventorySchema.index({ retailerId: 1, status: 1, receivedAt: -1 });
->>>>>>> Stashed changes
 
 // ─── MODEL REGISTRY ───────────────────────────────────────────────────────────
 

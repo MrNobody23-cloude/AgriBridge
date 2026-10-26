@@ -1,10 +1,9 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import { useRouter } from "next/navigation";
 import type { SessionUser } from "@/lib/session";
-import { dashboardForRole, ROLE_BY_DASHBOARD } from "@/lib/role-routes";
+import { dashboardForRole, roleForDashboardPath } from "@/lib/role-routes";
 import { usePathname } from "next/navigation";
 import { ROLE_WORKFLOWS } from "@/lib/role-workflows";
 import Link from "next/link";
@@ -92,7 +91,7 @@ export default function DashboardLayout({
               router.replace('/login');
               return;
             }
-            const requiredRole = ROLE_BY_DASHBOARD[pathname];
+            const requiredRole = roleForDashboardPath(pathname);
             if (requiredRole && sessionUser.role !== requiredRole) {
               router.replace(dashboardForRole(sessionUser.role));
               return;
@@ -153,15 +152,11 @@ export default function DashboardLayout({
       <div className="fixed bottom-[-15%] left-[-5%] w-[45%] h-[45%] bg-green-50 rounded-full blur-[100px] pointer-events-none opacity-60 z-0" />
       <div className="fixed top-[40%] left-[30%] w-[25%] h-[25%] bg-emerald-50 rounded-full blur-[80px] pointer-events-none opacity-30 z-0" />
 
-      <div className="relative z-10 flex">
-        {/* Sidebar — fixed, full height */}
-        <Sidebar user={user} />
-
-        {/* Main content area — offset by sidebar width */}
-        <div className="dashboard-content flex-1 min-w-0 ml-[240px] transition-all duration-300">
+      <div className="relative z-10 flex min-h-screen w-full min-w-0">
+        <div className="dashboard-content w-full min-w-0 flex-1">
           <TopBar title={title} user={user} />
           <main className="dashboard-main p-6 space-y-6">
-            {workflow && (
+            {workflow && user.role !== 'RETAILER' && (
               <section
                 className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-100 bg-white/90 px-5 py-4 shadow-sm"
                 aria-label="Role responsibilities"

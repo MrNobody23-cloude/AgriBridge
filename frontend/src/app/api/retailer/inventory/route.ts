@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     await connectToDatabase();
     const owner = auth.user.role === 'ADMIN' ? req.nextUrl.searchParams.get('retailerId') : auth.user.id;
-    const items = await RetailerInventoryModel.find(owner ? { retailerId: owner } : {}).sort({ receivedAt: -1 }).limit(250).lean<Record<string, any>[]>();
+    const items = await RetailerInventoryModel.find(owner ? { retailerId: owner } : {}).sort({ receivedAt: -1 }).lean<Record<string, any>[]>();
     const batches = await BatchModel.find({ _id: { $in: [...new Set(items.map((item) => item.batchId))] } }).lean<Record<string, any>[]>();
     const products = await ProductModel.find({ _id: { $in: [...new Set(batches.map((batch) => batch.productId))] } }).lean<Record<string, any>[]>();
     const productMap = new Map(products.map((product) => [product._id, product]));
